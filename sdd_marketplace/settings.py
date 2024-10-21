@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'users',  # For managing users,
     'seller', # For managing sellers,
     'order',  # For managing orders,  
+    'adminapp', #User defined application to manage the admin functionalities
 
 ]
 
