@@ -35,3 +35,35 @@ class UserPersonalProfile(BaseModel):
     class Meta:
         db_table = 'user_profile_details'
         ordering = ['created_at']
+
+
+from django.db import models
+from adminapp.models import *
+from users.models import *
+
+class RoleMaster(models.Model):
+    name = models.CharField(max_length=50, unique=True)#name of the role
+    description = models.TextField(blank=True, null=True)#description about the role
+    created_at = models.DateTimeField(auto_now_add=True)#created time
+    modified_at = models.DateTimeField(auto_now=True)#modified time
+    created_by=models.IntegerField(blank=True,null=True)# created user_id
+    modified_by=models.IntegerField(blank=True,null=True)# modified user_id
+    is_active = models.BooleanField(default=True)#active roles
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)#refer the iu_id
+
+    class Meta:
+        db_table="role_master"
+        ordering = ("created_at")
+
+
+
+class RoleMapping(models.Model):
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE,related_name='custom_user')#refer the user_id
+    role = models.ForeignKey(RoleMaster, on_delete=models.CASCADE,related_name='role_master')#refer the role 
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)#refer the iu_id
+
+    class Meta:
+        db_table="role_mapping"
+        
+
+
