@@ -25,8 +25,9 @@ class IUMasterAPI(APIView):
             else:
                 iumaster_obj = IUMaster.objects.filter(is_active=True)
 
-            data = [
-                {
+            data = []
+            for iu_obj in iumaster_obj:
+                data.append({
                     "id": iu_obj.id,
                     "name": iu_obj.name,
                     "domain": iu_obj.domain,
@@ -35,8 +36,9 @@ class IUMasterAPI(APIView):
                     "address": iu_obj.address,
                     "city": iu_obj.city,
                     "state": iu_obj.state
-                } for iu_obj in iumaster_obj
-            ]
+                } )
+                
+            
             return Response({"status": "success", "message": "IUMaster list retrieved successfully", "data": data}, status=status.HTTP_200_OK)
 
         except Exception as e:
