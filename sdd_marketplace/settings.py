@@ -62,12 +62,36 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'users',  # For managing users,
     'seller', # For managing sellers,
     'order',  # For managing orders,  
     'adminapp', #User defined application to manage the admin functionalities
 
 ]
+# jwt setup
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+    ),
+}
+
+# JWT Authentication settings
+import datetime
+
+JWT_AUTH = {
+    'JWT_VERIFY': data['JWT_VERIFY'],
+    'JWT_VERIFY_EXPIRATION': data['JWT_VERIFY_EXPIRATION'],
+    'JWT_EXPIRATION_DELTA': datetime.timedelta(seconds=data['JWT_EXPIRATION_TIME']),  # Token expiration time
+    'JWT_ALLOW_REFRESH': True,  # Allow refresh token
+    'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),  # Refresh token expiration
+    'JWT_AUTH_HEADER_PREFIX': data['JWT_AUTH_HEADER_PREFIX'],
+    'JWT_ALGORITHM': data['JWT_ALGORITHM'],
+    'JWT_PAYLOAD_HANDLER': data['JWT_PAYLOAD_HANDLER'],
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

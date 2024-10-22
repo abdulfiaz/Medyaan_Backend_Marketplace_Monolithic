@@ -23,7 +23,7 @@ class IUMaster(BaseModel):
     
 
     class Meta:
-        db_table = 'iumaster'
-        ordering = ['-created_at']
+        db_table = 'iu_master'
+        ordering = ['created_at']
 
 
