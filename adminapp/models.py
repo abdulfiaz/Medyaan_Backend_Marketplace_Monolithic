@@ -27,3 +27,13 @@ class IUMaster(BaseModel):
         ordering = ['created_at']
 
 
+class IUJsonMaster(models.Model):
+    channel_name=models.CharField(max_length=100,null=True,blank=True)#channel name of the seller register
+    document_type=models.CharField(max_length=50,null=True,blank=True)#type of document
+    document_name=models.CharField(max_length=30,null=True,blank=True)#document name
+    details=models.JSONField(default=dict, blank=True)#additional details 
+    version=models.CharField(default=1)
+    iu_id=models.ForeignKey(IUMaster,related_name='iu-id',on_delete=models.CASCADE)
+    class Meta:
+        db_table = 'iujsonmaster'
+        ordering = ['created_at']
