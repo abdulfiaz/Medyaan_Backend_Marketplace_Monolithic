@@ -2,6 +2,7 @@ from django.db import models
 from adminapp.models import *
 from seller.models import *
 from django.contrib.postgres.fields import ArrayField
+from users.models import CustomUser
 
 class ProductCategoryMaster(BaseModel):
     """To store the type of catgory """
@@ -149,6 +150,56 @@ class PaymentDetails(BaseModel):
     return_amount=models.DecimalField(null=True,blank=True,default=0,decimal_places=3)
     
     
+
+# Create your models here.
+
+"""this table is used to store the user favorites item by using this user can
+        1.view all items in wishlist.
+        2.add item to wishlist.
+        3.delete item from wishlist.
+    """
+class WishlistItem(BaseModel):
+    User=models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+    product_variant=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,blank=True,null=True)
+    Product=models.ForeignKey(ProductMaster,on_delete=models.CASCADE)
+    is_removed=models.BooleanField(default=False)#item is removed from wishlist or not
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
+    
+    class Meta:
+        db_table="wishlist_item"
+        ordering=['created_at']
+
+"""this table is used to store the products of user which are adding to cart
+        1.get all products from cart.
+        2.add product to cart.
+        3.update quantity of cart.
+        4.remove product from cart.
+"""
+class CartItem(BaseModel):
+    User=models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+    product_variant=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,blank=True,null=True)
+    Product=models.ForeignKey(ProductMaster,on_delete=models.CASCADE)
+    quantity=models.IntegerField(default=1)  # quantity of item add to cart
+    is_removed=models.BooleanField(default=False) # boolean field to cart product is removed or not
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
+
+    class Meta:
+        db_table="cart_item"
+        ordering=['created_at']
+
+class FeedbackDetails(BaseModel):
+    user=models.ForeignKey(CustomUser,on_delete=models.CASCADE)
+    product=models.ForeignKey(ProductMaster,on_delete=models.CASCADE)
+    comments=models.TextField(blank=True,null=True)
+    ratings=models.IntegerField(default=1)
+    images=ArrayField(models.TextField(null=True,blank=True,default=dict))
+    like_count=models.IntegerField(default=0)
+    dislike_count=models.IntegerField(default=0)
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)    
+
+    class Meta:
+        db_table="feedback_details"
+        ordering=['created_at']
 
 
 
