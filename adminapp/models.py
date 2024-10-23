@@ -16,7 +16,7 @@ class IUMaster(BaseModel):
     name=models.CharField(max_length=50)
     domain=models.CharField(max_length=50) #host name 
     contact_mobile_no=models.CharField(max_length=15)
-    logo=JSONField(default=dict) # logo image stored as json 
+    logo=JSONField(default=dict, blank=True) # logo image stored as json 
     address=models.CharField(max_length=250,null=True,blank=True)
     city=models.CharField(max_length=50,null=True,blank=True)
     state=models.CharField(max_length=50,null=True,blank=True)
@@ -27,13 +27,13 @@ class IUMaster(BaseModel):
         ordering = ['created_at']
 
 
-class IUJsonMaster(models.Model):
+class IUJsonMaster(BaseModel):
     channel_name=models.CharField(max_length=100,null=True,blank=True)#channel name of the seller register
     document_type=models.CharField(max_length=50,null=True,blank=True)#type of document
     document_name=models.CharField(max_length=30,null=True,blank=True)#document name
-    details=models.JSONField(default=dict, blank=True)#additional details 
-    version=models.CharField(default=1)
-    iu_id=models.ForeignKey(IUMaster,related_name='iu-id',on_delete=models.CASCADE)
+    details=JSONField(default=dict, blank=True)#additional details 
+    version=models.CharField(max_length=5,default=1)
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE,related_name='iu_jsonmaster')
     class Meta:
         db_table = 'iujsonmaster'
         ordering = ['created_at']
