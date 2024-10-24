@@ -6,20 +6,27 @@ from adminapp.models import *
 from users.models import *
 # Create your models here.
 class CustomUser(AbstractUser,BaseModel):
-    username=None
-    mobile_number=models.PositiveIntegerField(unique=True,blank=True)#mobile number
+    username = None
+    # email = models.EmailField(_('email address'), unique=True)
+    mobile_number = models.CharField(max_length=32)
+
+    USERNAME_FIELD = 'id'
+    REQUIRED_FIELDS = []
     email=models.EmailField(unique=True)#email-unique
     temp_code=models.CharField(max_length=10, null=True, blank=True)#temp-code for otp
     is_approval=models.BooleanField(default=False)
+    last_login_role = models.CharField(max_length=30,blank=True,null=True)
     approved_by=models.CharField(max_length=10, null=True, blank=True)
     iu_id=models.ForeignKey(IUMaster,related_name='CustomUser_iu_id',on_delete=models.CASCADE)
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []
+
     class Meta:
         unique_together = (('mobile_number', 'iu_id'),)
 
         db_table = 'customuser'
         ordering = ['created_at']
+    
+    def __str__(self):
+        return self.mobile_number
 
 class UserPersonalProfile(BaseModel):  
     """details of user"""
