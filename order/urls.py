@@ -3,10 +3,8 @@ from adminapp.views import *
 from django.conf.urls import url
 
 
-app_name = 'adminapp'
+app_name = 'order'
 
 
 urlpatterns = [
-    path('iumaster/',IUMasterAPI.as_view(),name='iumaster'),
-
 ]
