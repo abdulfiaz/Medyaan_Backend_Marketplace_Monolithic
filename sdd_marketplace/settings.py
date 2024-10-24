@@ -65,6 +65,93 @@ if os.path.isfile('env.json'):
             JWT_PAYLOAD_HANDLER = data["JWT_PAYLOAD_HANDLER"]
         except:
             JWT_PAYLOAD_HANDLER = os.environ["JWT_PAYLOAD_HANDLER"]
+    
+        try:
+            APPLICATION_HOST = data["APPLICATION_HOST"]
+        except:
+            APPLICATION_HOST = os.environ["APPLICATION_HOST"]
+        try:
+            BACKENDHOST = data["BACKENDHOST"]
+        except:
+            BACKENDHOST = os.environ["BACKENDHOST"]
+
+        try:
+            REDISHOST = data["REDISHOST"]
+        except:
+            REDISHOST = os.environ["REDISHOST"]
+        try:
+            REDISPORT = data["REDISPORT"]
+        except:
+            REDISPORT = os.environ["REDISPORT"]
+
+        try:
+            TIME_ZONE = data['TIME_ZONE']
+        except:
+            TIME_ZONE = os.environ['TIME_ZONE']
+
+        try:
+            EMAIL_HOST = data['EMAIL_HOST']
+        except:
+            EMAIL_HOST = os.environ['EMAIL_HOST']
+
+        try:
+            EMAIL_HOST_PASSWORD = data['EMAIL_HOST_PASSWORD']
+        except:
+            EMAIL_HOST_PASSWORD = data['EMAIL_HOST_PASSWORD']
+
+        try:
+            EMAIL_PORT = data['EMAIL_PORT']
+        except:
+            EMAIL_PORT = os.environ['EMAIL_PORT']
+
+        try:
+            EMAIL_HOST_USER = data['EMAIL_HOST_USER']
+        except:
+            EMAIL_HOST_USER = os.environ['EMAIL_HOST_USER']
+
+        try:
+            EMAIL_USE_TLS = data['EMAIL_USE_TLS']
+        except:
+            EMAIL_USE_TLS = os.environ['EMAIL_USE_TLS']
+
+        try:
+            RAK_AWS_OWNER = data['RAK_AWS_OWNER']
+        except:
+            RAK_AWS_OWNER = os.environ['RAK_AWS_OWNER']
+
+        try:
+            SMTP_SERVER = data["SMTP_SERVER"]
+        except:
+            SMTP_SERVER = os.environ["SMTP_SERVER"]
+        
+        try:
+            SMTP_PORT = data["SMTP_PORT"]
+        except:
+            SMTP_PORT = os.environ["SMTP_PORT"]
+
+        try:
+            SMTP_USERNAME = data["SMTP_USERNAME"]
+        except:
+            SMTP_USERNAME = os.environ["SMTP_USERNAME"]
+
+        try:
+            SMTP_PASSWORD = data["SMTP_PASSWORD"]
+        except:
+            SMTP_PASSWORD = os.environ["SMTP_PASSWORD"]
+
+else:
+    db_name = os.environ['DB_NAME']
+    db_user = os.environ['DB_USERNAME']
+    db_password = os.environ['DB_PASSWORD']
+    db_host = os.environ['DB_HOSTNAME']
+    db_port = os.environ['DB_PORT']
+
+    logsdb_name = os.environ["logsdb_name"]
+    logsdb_password = os.environ["logsdb_password"]
+    logsdb_user = os.environ['logsdb_user']
+    logsdb_host = os.environ['logsdb_host']
+    logsdb_port = os.environ['logsdb_port']
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.0/howto/deployment/checklist/
