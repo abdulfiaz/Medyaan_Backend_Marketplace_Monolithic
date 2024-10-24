@@ -1,6 +1,6 @@
 from adminapp.models import *
 
-def get_iuid(domain):
+def get_iuobj(domain):
     try:
         domain_name = IUMaster.objects.get(domain__icontains=domain)
         print("domain_name-->>", domain_name)
