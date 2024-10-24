@@ -76,15 +76,6 @@ if os.path.isfile('env.json'):
             BACKENDHOST = os.environ["BACKENDHOST"]
 
         try:
-            REDISHOST = data["REDISHOST"]
-        except:
-            REDISHOST = os.environ["REDISHOST"]
-        try:
-            REDISPORT = data["REDISPORT"]
-        except:
-            REDISPORT = os.environ["REDISPORT"]
-
-        try:
             TIME_ZONE = data['TIME_ZONE']
         except:
             TIME_ZONE = os.environ['TIME_ZONE']
@@ -113,11 +104,6 @@ if os.path.isfile('env.json'):
             EMAIL_USE_TLS = data['EMAIL_USE_TLS']
         except:
             EMAIL_USE_TLS = os.environ['EMAIL_USE_TLS']
-
-        try:
-            RAK_AWS_OWNER = data['RAK_AWS_OWNER']
-        except:
-            RAK_AWS_OWNER = os.environ['RAK_AWS_OWNER']
 
         try:
             SMTP_SERVER = data["SMTP_SERVER"]
