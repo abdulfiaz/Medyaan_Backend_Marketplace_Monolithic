@@ -21,7 +21,7 @@ class SellerProfile(BaseModel):
     bussiness_name=models.CharField(max_length=150,null=True,blank=True)#name of the bussiness
     address=models.TextField(null=True,blank=True)#seller address
     email=models.EmailField(unique=True)#seller email -unique
-    mobile_number=models.PositiveIntegerField(unique=True,blank=True)#seller mobile no
+    mobile_number=models.CharField(max_length=30,unique=True,blank=True)#seller mobile no
     gst_number=models.CharField(max_length=20)#get seller gst no
     pan_number=models.CharField(unique=True,max_length=15)#pan number for seller
     account_number=models.CharField(max_length=30)#bank account number
