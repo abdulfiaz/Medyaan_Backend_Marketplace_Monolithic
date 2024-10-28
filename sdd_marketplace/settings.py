@@ -70,60 +70,7 @@ if os.path.isfile('env.json'):
             APPLICATION_HOST = data["APPLICATION_HOST"]
         except:
             APPLICATION_HOST = os.environ["APPLICATION_HOST"]
-        try:
-            BACKENDHOST = data["BACKENDHOST"]
-        except:
-            BACKENDHOST = os.environ["BACKENDHOST"]
 
-        try:
-            TIME_ZONE = data['TIME_ZONE']
-        except:
-            TIME_ZONE = os.environ['TIME_ZONE']
-
-        try:
-            EMAIL_HOST = data['EMAIL_HOST']
-        except:
-            EMAIL_HOST = os.environ['EMAIL_HOST']
-
-        try:
-            EMAIL_HOST_PASSWORD = data['EMAIL_HOST_PASSWORD']
-        except:
-            EMAIL_HOST_PASSWORD = data['EMAIL_HOST_PASSWORD']
-
-        try:
-            EMAIL_PORT = data['EMAIL_PORT']
-        except:
-            EMAIL_PORT = os.environ['EMAIL_PORT']
-
-        try:
-            EMAIL_HOST_USER = data['EMAIL_HOST_USER']
-        except:
-            EMAIL_HOST_USER = os.environ['EMAIL_HOST_USER']
-
-        try:
-            EMAIL_USE_TLS = data['EMAIL_USE_TLS']
-        except:
-            EMAIL_USE_TLS = os.environ['EMAIL_USE_TLS']
-
-        try:
-            SMTP_SERVER = data["SMTP_SERVER"]
-        except:
-            SMTP_SERVER = os.environ["SMTP_SERVER"]
-        
-        try:
-            SMTP_PORT = data["SMTP_PORT"]
-        except:
-            SMTP_PORT = os.environ["SMTP_PORT"]
-
-        try:
-            SMTP_USERNAME = data["SMTP_USERNAME"]
-        except:
-            SMTP_USERNAME = os.environ["SMTP_USERNAME"]
-
-        try:
-            SMTP_PASSWORD = data["SMTP_PASSWORD"]
-        except:
-            SMTP_PASSWORD = os.environ["SMTP_PASSWORD"]
 
 else:
     db_name = os.environ['DB_NAME']
