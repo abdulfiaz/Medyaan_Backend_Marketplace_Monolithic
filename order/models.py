@@ -69,7 +69,7 @@ class VariantOption(BaseModel):
 class ProductVariation(BaseModel):
     """It will store the variations for the particular products"""
     product=models.ForeignKey(ProductMaster,on_delete=models.CASCADE,related_name='ProductVariation_product_master')#refer the productMaster
-    variation=models.ForeignKey(VariantMaster,on_delete=models.CASCADE,related_name='ProductVariation_variation')#variations for the particular product
+    variation=models.ForeignKey(VariantOption,on_delete=models.CASCADE,related_name='ProductVariation_variation')#variations for the particular product
     total_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)#price of the product
     selling_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)#selling price of the product
     stock=models.IntegerField(blank=True,null=True)#quantity of the product 
