@@ -6,11 +6,11 @@ from users.models import CustomUser
 
 class ProductCategoryMaster(BaseModel):
     """To store the type of catgory """
-    name=models.CharField(max_length=150,null=True,blank=True) #category name
-    description=models.CharField(max_length=300,null=True,blank=True) #description about the category
-    sub_categories = models.ManyToManyField('self', blank=True,related_name='product_subcategory')
+    name=models.CharField(max_length=150,null=True,blank=True)
+    description=models.CharField(max_length=300,null=True,blank=True) 
+    sub_categories = models.ManyToManyField('self', blank=True,related_name='product_subcategory')#sub category as many to many
     can_be_deleted=models.BooleanField(default=False)
-    image=ArrayField(models.TextField(),blank=True,null=True)#image for each product
+    image=ArrayField(models.TextField(),blank=True,null=True)
     iu_id = models.ForeignKey(IUMaster, on_delete=models.CASCADE, related_name='product_category_master_iu')
 
 
@@ -23,7 +23,7 @@ class ProductCategoryMaster(BaseModel):
 class ProductMaster(BaseModel):
     """product table for store the products details"""
     seller=models.ForeignKey(CustomUser,on_delete=models.CASCADE,related_name='product_master_seller')#seller reference for approval details
-    subcategroy=models.ForeignKey(ProductCategoryMaster,on_delete=models.CASCADE,related_name='product_master_sub_category')#refer the subcategory
+    subcategory=models.ForeignKey(ProductCategoryMaster,on_delete=models.CASCADE,related_name='product_master_sub_category')#refer the subcategory
     name=models.CharField(max_length=200,null=True,blank=True)#product name
     body_content=models.TextField(null=True,blank=True)#details about the products
     description=models.TextField(max_length=300,null=True,blank=True)#intro or summary about the product
@@ -31,9 +31,8 @@ class ProductMaster(BaseModel):
     is_published=models.BooleanField(default=False)
     approved_by=models.IntegerField(blank=True,null=True)#check approved by
     product_status=models.CharField(max_length=20,default='pending')#initial status for the product
-    image=ArrayField(models.TextField(),blank=True,null=True)#image for each product
-    can_be_deleted=models.BooleanField(default=False)
-    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)#refer the iu_id
+    image=ArrayField(models.TextField(),blank=True,null=True)
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
 
     class Meta:
         db_table='product_master'
@@ -41,20 +40,19 @@ class ProductMaster(BaseModel):
 
 
 class VariantMaster(BaseModel):
-    """store the type of varient for the products"""
-    categroy=models.ForeignKey(ProductCategoryMaster,on_delete=models.CASCADE,related_name='VariantMaster_category')#refer the categorymaster table
+    """store the type of variant for the products"""
+    category=models.ForeignKey(ProductCategoryMaster,on_delete=models.CASCADE,related_name='VariantMaster_category')#refer the categorymaster table
     name=models.CharField(max_length=200,null=True,blank=True)#varient type name
-    description=models.CharField(max_length=300,null=True,blank=True)#type description
-    can_be_deleted=models.BooleanField(default=False)
-    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)#refer iu_id
+    description=models.CharField(max_length=300,null=True,blank=True)
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
 
 
     class Meta:
-        db_table='varient_master'
+        db_table='variant_master'
         ordering = ['created_at']
 
 class VariantOption(BaseModel):
-    """To store the Specific varient for the  product"""
+    """To store the Specific variant for the  product"""
     variation=models.ForeignKey(VariantMaster,on_delete=models.CASCADE,related_name='Variantoption_variation')#refer the variation table for type
     name=models.CharField(max_length=200,null=True,blank=True)
     description=models.CharField(max_length=300,null=True,blank=True)
@@ -62,7 +60,7 @@ class VariantOption(BaseModel):
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
 
     class Meta:
-        db_table='varient_option'
+        db_table='variant_option'
         ordering = ['created_at']
 
 
