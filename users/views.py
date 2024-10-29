@@ -28,7 +28,7 @@ def login(request):
             password = request.data['password']
  
             try:
-                user = CustomUser.objects.get(mobile_number =mobile_number )
+                user = CustomUser.objects.get(mobile_number =mobile_number,is_active=True)
             except CustomUser.DoesNotExist:
                 return Response({'status': 'error', 'message': 'Email / mobile number not found'}, status=status.HTTP_401_UNAUTHORIZED)
  
@@ -57,16 +57,15 @@ class RoleMasterCreateView(APIView):
             role_name_input = request.data.get('name')
             description = request.data.get('description')
 
-            if not role_name_input:
-                return Response(
-                    {'status': 'failure', 'message': 'Role name is required.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
             role_name = get_user_roles(request)
 
             if role_name != 'admin':
                 return Response({'status': 'failure', 'message': 'Only admin users can create roles.'},status=status.HTTP_403_FORBIDDEN )
+
+            if not role_name_input:
+                return Response({'status': 'failure', 'message': 'Role name is required.'},status=status.HTTP_400_BAD_REQUEST)
+
+            
 
             try:
                 domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
@@ -110,14 +109,14 @@ class CreateCustomUserView(APIView):
 
         if role_name_get == 'admin' or role_name_get == 'manager':
             if role_name is None and role_name_get != 'admin':
-                users = [CustomUser.objects.get(id=user.id,iu_id = iu_master)]
+                users = [CustomUser.objects.get(id=user.id,iu_id = iu_master,is_active=True)]
             elif role_name is None and role_name_get == 'admin':
-                users = CustomUser.objects.filter(iu_id = iu_master)
+                users = CustomUser.objects.filter(iu_id = iu_master,is_active=True)
 
             elif (role_name == 'manager' and role_name_get == 'admin'):
-                users = CustomUser.objects.filter(custom_user__role__name='manager',iu_id = iu_master)
+                users = CustomUser.objects.filter(custom_user__role__name='manager',iu_id = iu_master,is_active=True)
             elif role_name == 'consumer':
-                users = CustomUser.objects.filter(custom_user__role__name='consumer',iu_id = iu_master)
+                users = CustomUser.objects.filter(custom_user__role__name='consumer',iu_id = iu_master,is_active=True)
             else:
                 return Response({"error": f"No users found for the role '{role_name}'."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -126,7 +125,7 @@ class CreateCustomUserView(APIView):
             return Response({"users": user_data.data}, status=status.HTTP_200_OK)
         
         else:
-            users = CustomUser.objects.filter(id=user.id,iu_id = iu_master)
+            users = CustomUser.objects.filter(id=user.id,iu_id = iu_master,is_active=True)
             user_data = GetCustomUserSerializer(users, many=True)
             return Response({"users": user_data.data}, status=status.HTTP_200_OK)
         
@@ -162,8 +161,6 @@ class CreateCustomUserView(APIView):
 
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-        # serializer.validated_data['password'] = make_password(password)
 
         user = serializer.save()
 
@@ -211,7 +208,7 @@ class CreateCustomUserView(APIView):
             return Response({'status': 'failure', 'message': 'IU domain not found.'},status=status.HTTP_404_NOT_FOUND)
 
         try:
-            user = CustomUser.objects.get(id=request.user.id,iu_id=iu_master)
+            user = CustomUser.objects.get(id=request.user.id,iu_id=iu_master,is_active=True)
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
         
@@ -255,8 +252,8 @@ class CreateCustomUserView(APIView):
         elif user_id is None:
             user_id = request.user.id
         try:
-            user = CustomUser.objects.get(id=user_id, iu_id=iu_master)
-            user_profile = UserPersonalProfile.objects.get(user=user, iu_id=iu_master)
+            user = CustomUser.objects.get(id=user_id, iu_id=iu_master,is_active=True)
+            user_profile = UserPersonalProfile.objects.get(user=user, iu_id=iu_master,is_active=True)
         except CustomUser.DoesNotExist:
             return Response({"status": "error", "message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 

@@ -14,7 +14,34 @@ from adminapp.iudetail import get_iuobj
 from users.auth import get_user_roles
 from rest_framework.exceptions import AuthenticationFailed
 
+
+# paymenttypemaster crud i.e mode of payment cards,cash on delivery,upi etc
 class PaymentTypeMasterView(APIView):
+    def get(self, request):
+        payment_type_id = request.query_params.get('payment_type_id', None)
+        role_name = get_user_roles(request)
+        domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+
+        if role_name != 'admin':
+            return Response({"status": "error", "message": "only admin can view payment type master details"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            if payment_type_id:
+                payment_type_master = PaymentTypeMaster.objects.get(id=payment_type_id, iu_id=iu_id, is_active=True)
+                serializer = GetPaymentTypeMasterSerializer(payment_type_master)  
+            else:
+                
+                payment_type_master = PaymentTypeMaster.objects.filter(iu_id=iu_id, is_active=True)
+                serializer = GetPaymentTypeMasterSerializer(payment_type_master, many=True)  
+
+            return Response({"status": "success", "message": "data retrieved successfully", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        except PaymentTypeMaster.DoesNotExist:
+            return Response({"status": "error", "message": "PaymentType not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
     def post(self,request):
         domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
         iu_id = get_iuobj(domain)
@@ -28,39 +55,17 @@ class PaymentTypeMasterView(APIView):
         data = request.data
         data['created_by'] = request.user.id
         data['iu_id'] = iu_id.id
-        print("iu_id-----",iu_id)
 
         serializer = PaymentTypeMasterSerializer(data=data)
-        try:
-            if serializer.is_valid():
-                serializer.save()
-                transaction.commit()
-                return Response({"status":"success","message":"paymenttype created successfully"},status=status.HTTP_201_CREATED)
-        except:
+        if serializer.is_valid():
+            serializer.save()
+            transaction.commit()
+            return Response({"status":"success","message":"paymenttype created successfully"},status=status.HTTP_201_CREATED)
+        else:
             transaction.rollback()
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
-    def get(self,request):
-        payment_type_id = request.query_params.get('payment_type_id',None)
-        role_name = get_user_roles(request)
-        domain = request.META.get('HTTP_ORIGIN',settings.APPLICATION_HOST)
-        iu_id = get_iuobj(domain)
-
-        if role_name !='admin':
-            return Response({"status":"error","message":"only admin can view payment type master details"},status=status.HTTP_401_UNAUTHORIZED)
-
-        try:
-            if payment_type_id:
-                payment_type_master = PaymentTypeMaster.objects.get(id=payment_type_id,iu_id=iu_id,is_active=True)
-            else:
-                payment_type_master = PaymentTypeMaster.objects.filter(is_active=True)
-        except PaymentTypeMaster.DoesNotExist:
-            return Response({"status": "error", "message": "PaymentType not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        
-        serializer = GetPaymentTypeMasterSerializer(payment_type_master,many=True)
-        return Response({"status":"success","message":"data retrieved successfuly","data":serializer.data},status=status.HTTP_200_OK)
-        
+    
     def put(self,request):
         domain = request.META.get('HTTP_ORIGIN',settings.APPLICATION_HOST)
         iu_id = get_iuobj(domain)
@@ -84,12 +89,11 @@ class PaymentTypeMasterView(APIView):
         data['iu_id']=iu_id.id
 
         serializer = PaymentTypeMasterSerializer(payment_type_obj,data=data,partial=True)
-        try:
-            if serializer.is_valid():
-                serializer.save()
-                transaction.commit()
-                return Response({"status": "success", "message": "PaymentType updated successfully"}, status=status.HTTP_200_OK)
-        except:
+        if serializer.is_valid():
+            serializer.save()
+            transaction.commit()
+            return Response({"status": "success", "message": "PaymentType updated successfully"}, status=status.HTTP_200_OK)
+        else:
             transaction.rollback()
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
@@ -109,15 +113,16 @@ class PaymentTypeMasterView(APIView):
             payment_type_obj = PaymentTypeMaster.objects.get(id=payment_type_master_id, iu_id=iu_master,is_active=True)
         except PaymentTypeMaster.DoesNotExist:
             return Response({"status": "error", "message": "id not found"}, status=status.HTTP_404_NOT_FOUND)
+        
         transaction.set_autocommit(False)
-        try:
-            serializer = PaymentTypeMasterSerializer(payment_type_obj, data={'is_active': False,'modified_by':request.user.id}, partial=True)
-            if serializer.is_valid():
-                serializer.save()
-                transaction.commit()
-                return Response({"status": "success", "message": "payment_type deleted successfully"}, status=status.HTTP_200_OK)
+        serializer = PaymentTypeMasterSerializer(payment_type_obj, data={'is_active': False,'modified_by':request.user.id}, partial=True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            transaction.commit()
+            return Response({"status": "success", "message": "payment_type deleted successfully"}, status=status.HTTP_200_OK)
 
-        except:
+        else:
             transaction.rollback()
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
