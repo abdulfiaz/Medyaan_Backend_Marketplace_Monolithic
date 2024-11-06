@@ -21,6 +21,28 @@ class Categoryserializer(serializers.ModelSerializer):
     class Meta:
         model = ProductCategoryMaster
         fields = ['id', 'name', 'description', 'sub_categories','created_by','iu_id','modified_by']
+
+class VariantMasterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=VariantMaster
+        fields=['id','category','name', 'description','iu_id','created_by','modified_by']
+
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super().__init__(*args, **kwargs)
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+
+    def update(self, obj, validated_data):
+        for attr, value in validated_data.items():
+            if value:  
+                setattr(obj, attr, value)
+        obj.save()
+        return obj
+ 
  
 
 
