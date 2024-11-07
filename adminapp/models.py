@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.postgres.fields import JSONField
+import time
+
 
 class BaseModel(models.Model):
     is_active = models.BooleanField(default=True)
@@ -10,7 +12,15 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
+  
+    def created_at_timestamp(self):
+        return round(self.created_at.timestamp())
+        
 
+    
+    def modified_at_timestamp(self):
+        return round(self.modified_at.timestamp())
+    
 # to store host names to differentiate the user based on the host 
 class IUMaster(BaseModel):
     name=models.CharField(max_length=50)
