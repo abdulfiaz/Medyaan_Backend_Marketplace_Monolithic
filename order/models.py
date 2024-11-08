@@ -72,7 +72,7 @@ class ProductVariation(BaseModel):
     selling_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)#selling price of the product
     stock=models.IntegerField(blank=True,null=True)#quantity of the product 
     tax_rate=models.DecimalField(max_digits=3,blank=True,null=True,decimal_places=3)
-    tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
+    tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
     image=ArrayField(models.TextField(),blank=True,null=True)#image for each product
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)#refer the iu_id
 
@@ -181,13 +181,13 @@ class FeedbackDetails(BaseModel):
 
 class InvoiceModel(BaseModel):
     user=models.ForeignKey(CustomUser,on_delete=models.CASCADE,related_name='user_invoice_model')
-    invoice_number=models.IntegerField(unique=True,blank=True)
+    invoice_number=models.CharField(max_length=200,null=True,blank=True)
     order_detail=models.ForeignKey(OrderDetails,on_delete=models.CASCADE,related_name='order_invoice_model')
-    total_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
-    tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
-    total_discount_percentage=models.DecimalField(max_digits=3,blank=True,null=True,decimal_places=3)
-    total_discount_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
-    overall_total=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
+    total_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
+    tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
+    total_discount_percentage=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
+    total_discount_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
+    overall_total=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
     status=models.CharField(max_length=30,default='pending')
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
  
@@ -199,12 +199,12 @@ class InvoiceItems(BaseModel):
     invoice=models.ForeignKey(InvoiceModel,on_delete=models.CASCADE,related_name='invoice_invoiceitems')
     product=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,related_name='invoice_product')
     quantity=models.IntegerField(blank=True,null=True)
-    unit_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
-    tax_rate=models.DecimalField(max_digits=6,blank=True,null=True,decimal_places=3)
-    tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
+    unit_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
+    tax_rate=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
+    tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
     discount_percentage=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
     discount_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
-    total=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=5)
+    total=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
  
     class Meta:
