@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import *
 from django.conf.urls import url
-from .function import create_notification
+from .utils import create_notification
 
 app_name = 'notification'
 
