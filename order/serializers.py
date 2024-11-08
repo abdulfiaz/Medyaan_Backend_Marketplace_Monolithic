@@ -44,6 +44,71 @@ class VariantMasterSerializer(serializers.ModelSerializer):
         return obj
  
  
+class VariantOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model=VariantOption
+        fields=['id','variation','name', 'description','iu_id','image','created_by','modified_by']
+        
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super().__init__(*args, **kwargs)
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+
+    def update(self, obj, validated_data):
+        for attr, value in validated_data.items():
+            if value:  
+                setattr(obj, attr, value)
+        obj.save()
+        return obj
+
+    
+class ProductVariationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductVariation  
+        fields = ['id', 'product', 'variation', 'total_price', 'selling_price', 'stock','tax_rate','tax_amount','image', 'iu_id', 'created_by']
+
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super().__init__(*args, **kwargs)
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+
+    def update(self, obj, validated_data):
+        for attr, value in validated_data.items():
+            if value:  
+                setattr(obj, attr, value)
+        obj.save()
+        return obj
+
+
+
+class ProductMasterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductMaster  
+        fields ='__all__'
+
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super().__init__(*args, **kwargs)
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+
+    def update(self, obj, validated_data):
+        for attr, value in validated_data.items():
+            if value:  
+                setattr(obj, attr, value)
+        obj.save()
+        return obj
 
 
 class PaymentTypeMasterSerializer(serializers.ModelSerializer):
