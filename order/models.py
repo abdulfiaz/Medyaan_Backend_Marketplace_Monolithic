@@ -71,7 +71,7 @@ class ProductVariation(BaseModel):
     total_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)#price of the product
     selling_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)#selling price of the product
     stock=models.IntegerField(blank=True,null=True)#quantity of the product 
-    tax_rate=models.DecimalField(max_digits=3,blank=True,null=True,decimal_places=3)
+    tax_rate=models.DecimalField(max_digits=5,blank=True,null=True,decimal_places=3)
     tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
     image=ArrayField(models.TextField(),blank=True,null=True)#image for each product
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)#refer the iu_id
