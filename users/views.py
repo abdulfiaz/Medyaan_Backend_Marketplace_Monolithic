@@ -275,8 +275,72 @@ class CreateCustomUserView(APIView):
             return Response(user_profile_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class RefreshTokenView(APIView):
+    def post(self, request):
+        try:
+            user = request.user
+            role_type = request.data.get('role_type')
+            with transaction.atomic():
+                try:
+                    role_mapping = RoleMapping.objects.get(user=user, role__id=role_type)
+                except RoleMapping.DoesNotExist:
+                    return Response({
+                        "status": "error",
+                        "message": "Role not found for user"
+                    }, status=status.HTTP_400_BAD_REQUEST)
 
+                user.last_login_role = role_mapping.role.name
+                user.save()
 
+                payload = jwt_payload_handler(user)
+                token = jwt_encode_handler(payload)
+                
+                return Response({
+                    'status': "success",
+                    "message": "Login successful",
+                    "data": {"token": token}
+                }, status=status.HTTP_200_OK)
 
+        except CustomUser.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "User does not exist."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except RoleMaster.DoesNotExist:
+            return Response({
+                "status": "error",
+                "message": "Role does not exist."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "message": str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+class ChangePassword(APIView):
+    def put(self, request):
+        access_user=request.user
+        data=request.data
+        old_password=data.get('old_password')
+        password1=data.get('password1')
+        password2=data.get('password2')
+        if password1!=password2:
+            return Response({"status":"error","message":"password invalid"},status=status.HTTP_400_BAD_REQUEST)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
 
-
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            user=CustomUser.objects.get(id=access_user.id,is_active=True,iu_id=iu_id)
+            if not check_password(old_password,user.password):
+                return Response({
+                    "status":"error",
+                    "message":"invalid"
+                },status=status.HTTP_400_BAD_REQUEST)
+            user.password=make_password(password2)
+            user.temp_code=None
+            user.modified_by=user.id
+            user.save()
+            return Response({"status":"success","message":"password change successfull"},status=status.HTTP_200_OK)
+        except CustomUser.DoesNotExist:
+            return Response({"status":"error","message":"user not exists"},status=status.HTTP_400_BAD_REQUEST)

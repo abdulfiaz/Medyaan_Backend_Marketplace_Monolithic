@@ -24,4 +24,8 @@ urlpatterns = [
     path('users/api/', include('users.urls', namespace='users')),
     
     path('order/api/', include('order.urls', namespace='order')),
+
+    path('seller/api/', include('seller.urls', namespace='seller')),
+
+    path('notification/api/', include('notification.urls', namespace='notification')),
 ]

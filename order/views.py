@@ -766,6 +766,82 @@ class PaymentTypeMasterView(APIView):
         else:
             transaction.rollback()
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class ProductMasterView(APIView):
+    serializer_class=ProductMasterSerializer
+    def get(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if id:
+            product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
+            serializer=self.serializer_class(product)
+        else:
+            product=ProductMaster.objects.filter(is_active=True)
+            serializer = self.serializer_class(product, many=True)
+
+        return Response({"status":"success","message":"successfully received data","data":serializer.data},status=status.HTTP_200_OK)
+
+    def post(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        data = request.data
+        data['seller']=request.user.id
+
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'failure', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        data['iu_id'] = iu_id.id
+
+        product=self.serializer_class(data=data)
+        if product.is_valid():
+            serializer_iu=product.save(created_by=request.user.id)
+
+            return Response({"status":"success","message":"Successfully created","data":serializer_iu.id},status=status.HTTP_201_CREATED)
+        else:
+            return Response({"status":"error","message":"product is not create","data":product.errors},status=status.HTTP_400_BAD_REQUEST)
+            
+    def put(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
+       
+        serializer=self.serializer_class(product,data=request.data,partial=True)
+        if serializer.is_valid():
+            serializer.save(modified_by=request.user.id)
+            return Response({"status":"success","message":"successfully update the data"},status=status.HTTP_200_OK)
+        else:
+            return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
+        if product:            
+            product.is_active = False
+            product.save()
+            return Response({"status": "success", "message": "Product deleted successfully"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"status":"error","message":"data  is not delete"},status=status.HTTP_400_BAD_REQUEST)
 
 
         

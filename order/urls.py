@@ -13,6 +13,7 @@ urlpatterns = [
     path('productvariation/',ProductVariationAPI.as_view(),name='product_variant'),
     path('manager/',ManagerAPI.as_view(), name='manager-details'),
     path('payment-type-master/',PaymentTypeMasterView.as_view(),name='paymenttypemaster'),
+    path('product/',ProductMasterView.as_view(),name='productmaster'),
 ]
 
 

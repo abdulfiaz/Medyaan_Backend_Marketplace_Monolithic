@@ -112,6 +112,7 @@ INSTALLED_APPS = [
     'seller', # For managing sellers,
     'order',  # For managing orders,  
     'adminapp', #User defined application to manage the admin functionalities
+    'notification',#For managing notification
 
 ]
 # jwt setup
@@ -154,6 +155,16 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'vishalakshik14503@gmail.com'
+EMAIL_HOST_PASSWORD = 'dyok sizu vkkq zgcp'
+DEFAULT_FROM_EMAIL = 'vishalakshik14503@gmail.com'
 
 ROOT_URLCONF = 'sdd_marketplace.urls'
 
