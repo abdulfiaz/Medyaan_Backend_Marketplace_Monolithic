@@ -38,12 +38,13 @@ class IUMaster(BaseModel):
 
 
 class IUJsonMaster(BaseModel):
-    channel_name=models.CharField(max_length=100,null=True,blank=True)#channel name of the seller register
-    document_type=models.CharField(max_length=50,null=True,blank=True)#type of document
-    document_name=models.CharField(max_length=30,null=True,blank=True)#document name
-    details=JSONField(default=dict, blank=True)#additional details 
+    channel_name=models.CharField(max_length=100,null=True,blank=True)
+    document_type=models.CharField(max_length=50,null=True,blank=True)
+    document_name=models.CharField(max_length=30,null=True,blank=True)
+    details=JSONField(default=dict, blank=True) 
     version=models.CharField(max_length=5,default=1)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE,related_name='iu_jsonmaster')
     class Meta:
         db_table = 'iujsonmaster'
         ordering = ['created_at']
+
