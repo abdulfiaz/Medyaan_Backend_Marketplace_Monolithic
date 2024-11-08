@@ -6,7 +6,7 @@ from.models import SellerApplicationDetails,SellerProfile
 from .serializers import SellerApplicationDetailsSerializer,SellerProfileSerializer
 from adminapp.iudetail import *
 from adminapp.models import IUJsonMaster
-from adminapp.function import overallnotification
+from adminapp.utils import overallnotification
 from users.auth import *
 from users.models import CustomUser,RoleMapping,RoleMaster
 from notification.models import EventMaster,TemplateMaster
@@ -348,7 +348,7 @@ class ManagerApprovalView(APIView):
         event_id = event.id
         event.email=True
         event.save()
-        
+
         notification_message = template.content.format(application.id, request.user.id)
         sender_id = request.user.id
         receiver_id=application.user.id

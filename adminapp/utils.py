@@ -1,5 +1,5 @@
 
-from notification.function import create_notification
+from notification.utils import create_notification
 
 def overallnotification(sender_id, receiver_id, event, subject, message, notification_message, iu_id, request_user):
     data = {
