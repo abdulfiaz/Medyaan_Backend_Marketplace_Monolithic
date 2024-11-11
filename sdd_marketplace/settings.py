@@ -162,9 +162,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'vishalakshik14503@gmail.com'
-EMAIL_HOST_PASSWORD = 'dyok sizu vkkq zgcp'
-DEFAULT_FROM_EMAIL = 'vishalakshik14503@gmail.com'
+EMAIL_HOST_USER = 'marketplaceecommerce24@gmail.com'
+EMAIL_HOST_PASSWORD = 'vydj berr yepr pibn'
 
 ROOT_URLCONF = 'sdd_marketplace.urls'
 
