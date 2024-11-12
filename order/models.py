@@ -99,7 +99,7 @@ class OrderDetails(BaseModel):
 class OrderItems(BaseModel):
     user = models.ForeignKey(CustomUser, related_name='OrderItems_user', on_delete=models.CASCADE)
     order=models.ForeignKey(OrderDetails, related_name='OrderItems_order',on_delete=models.CASCADE)
-    product=models.ForeignKey(ProductMaster,related_name='OrderItems_product',on_delete=models.CASCADE)
+    product=models.ForeignKey(ProductVariation,related_name='OrderItems_product',on_delete=models.CASCADE)
     variation=models.ForeignKey(VariantOption,related_name='OrderItems_variation',on_delete=models.CASCADE)
     seller=models.ForeignKey(SellerProfile,related_name='OrderItems_seller',on_delete=models.CASCADE)
     quantity=models.IntegerField(null=True,blank=True)
