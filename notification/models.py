@@ -1,3 +1,4 @@
+import re
 from django.db import models
 from requests import Response
 from adminapp.models import BaseModel, IUMaster
@@ -7,6 +8,8 @@ from django.dispatch import receiver
 from django.conf import settings
 from users.models import *
 from rest_framework import status
+
+from django.template.loader import render_to_string
 class TemplateMaster(BaseModel):
     template_name = models.CharField(max_length=100, blank=True, null=True)
     content = models.TextField(blank=True, null=True)
@@ -42,13 +45,14 @@ class Notification(BaseModel):
         ordering = ['created_at']
 
 def get_email(user_id):
-    # print("user-id",user_id)
     try:
         user =CustomUser.objects.get(id=user_id)
         return user.email
     except CustomUser.DoesNotExist:
         return None
-    
+
+import logging
+
 @receiver(post_save, sender=Notification)
 def send_notification_in_email(sender, instance, created, **kwargs):
     if instance.event.email:
@@ -58,18 +62,32 @@ def send_notification_in_email(sender, instance, created, **kwargs):
         sender_email = get_email(sender_id)
         receiver_email = get_email(receiver_id)
 
-       
         if not sender_email or not receiver_email:
             return None
+        match = re.search(r"Application ID:\s*(\d+)", instance.notification_message)
+        application_id = match.group(1) if match else "N/A"
+        context = {
+            'subject': instance.subject,
+            'message': instance.message,
+            'application_id': application_id,
+            'details': instance.notification_message,
+        }
+    
+        try:
+            email_content = render_to_string('email/notification_email.html', context)
+            logging.info("Email content rendered successfully.")
+        except Exception as e:
+            logging.error(f"Failed to render email content: {e}")
+            return
 
-        message = instance.notification_message
-
-      
         subject = instance.subject
         email = EmailMessage(
             subject=subject,
-            body=message,
+            body=email_content,
             from_email=sender_email,
             to=[receiver_email]
         )
+        email.content_subtype = "html"
         email.send(fail_silently=False)
+
+
