@@ -111,6 +111,8 @@ class ProductMasterSerializer(serializers.ModelSerializer):
         return obj
 
 
+
+
 class PaymentTypeMasterSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentTypeMaster

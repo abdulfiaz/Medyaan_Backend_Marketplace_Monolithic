@@ -1,18 +1,19 @@
-from django.shortcuts import render
-from rest_framework_jwt.serializers import jwt_payload_handler, jwt_encode_handler
-from django.db import transaction, IntegrityError
-from django.db.models import Q
 from django.conf import settings
 from adminapp.iudetail import get_iuobj
 from users.auth import get_user_roles
-from rest_framework.exceptions import AuthenticationFailed
 from django.shortcuts import get_object_or_404
-from rest_framework.response import Response
 from django.db import transaction
 from order.serializers import *
 from users.models import *
 from order.models import *
+from notification.models import *
+from adminapp.utils import *
+from adminapp.models import *
 from rest_framework.views import APIView,status
+from rest_framework.response import Response
+from django.shortcuts import render
+from django.template.loader import render_to_string
+
 
 
 class CategoryMasterAPI(APIView):
@@ -193,6 +194,7 @@ class VariantMasterAPI(APIView):
 
             data = request.data
             data['iu_id'] = iu_id.id
+            seller_id=request.user.id
             id = request.query_params.get('id')
 
             fields=['id','category','name','description']
@@ -200,12 +202,12 @@ class VariantMasterAPI(APIView):
             variant_data=[]
             
             if id:
-                Variant = get_object_or_404(VariantMaster, id=id, is_active=True,iu_id=iu_id)
+                Variant = get_object_or_404(VariantMaster, id=id, is_active=True,iu_id=iu_id,created_by=seller_id)
                 variants= self.serializer_class(Variant,fields=fields)
                 variant_data.append(variants.data) 
 
             else:
-                Variant= VariantMaster.objects.filter(is_active=True,iu_id=iu_id)
+                Variant= VariantMaster.objects.filter(is_active=True,iu_id=iu_id,created_by=seller_id)
                 variants= self.serializer_class(Variant, fields=fields, many=True)
                 variant_data=variants.data
 
@@ -316,18 +318,19 @@ class VariantOptionAPI(APIView):
             data = request.data
             data['iu_id'] = iu_id.id
             id = request.query_params.get('id')
+            seller_id=request.user.id
 
             fields=['id','variation','name','description']
 
             variant_choice=[]
             
             if id:
-                Variantoption = get_object_or_404(VariantOption, id=id, is_active=True,iu_id=iu_id)
+                Variantoption = get_object_or_404(VariantOption, id=id, is_active=True,iu_id=iu_id,created_by=seller_id)
                 variants= self.serializer_class(Variantoption,fields=fields)
                 variant_choice.append(variants.data) 
 
             else:
-                Variantoption= VariantOption.objects.filter(is_active=True,iu_id=iu_id)
+                Variantoption= VariantOption.objects.filter(is_active=True,iu_id=iu_id,created_by=seller_id)
                 variants= self.serializer_class(Variantoption, fields=fields, many=True)
                 variant_choice=variants.data
 
@@ -436,6 +439,8 @@ class ProductVariationAPI(APIView):
             data = request.data
             data['iu_id'] = iu_id.id
 
+            seller_id=request.user.id
+
             id = request.query_params.get('id')
 
             fields=['id', 'product', 'variation', 'total_price', 'selling_price', 'stock','tax_rate','tax_amount']
@@ -443,12 +448,12 @@ class ProductVariationAPI(APIView):
             product_variant_data=[]
             
             if id:
-                Product_variant = get_object_or_404(ProductVariation, id=id, is_active=True,iu_id=iu_id)
+                Product_variant = get_object_or_404(ProductVariation, id=id, is_active=True,iu_id=iu_id,created_by=seller_id)
                 product= self.serializer_class(Product_variant,fields=fields)
                 product_variant_data.append(product.data) 
 
             else:
-                Product_variant= ProductVariation.objects.filter(is_active=True,iu_id=iu_id)
+                Product_variant= ProductVariation.objects.filter(is_active=True,iu_id=iu_id,created_by=seller_id)
                 product= self.serializer_class(Product_variant,fields=fields, many=True)
                 product_variant_data=product.data
 
@@ -465,6 +470,10 @@ class ProductVariationAPI(APIView):
 
         product_id = request.data.get('product_id')
         product = get_object_or_404(ProductMaster, id=product_id, is_active=True)
+        
+        if product.seller.id != request.user.id:
+            return Response({"status": "error", "message": "You are not authorized to add variants for this product"}, status=status.HTTP_403_FORBIDDEN)
+        
         variantoption_id = request.data.get('option_id')
         variantoption = get_object_or_404(VariantOption, id=variantoption_id, is_active=True)
 
@@ -476,8 +485,8 @@ class ProductVariationAPI(APIView):
         data['created_by'] = request.user.id
         data['product'] = product.id
         data['variation'] = variantoption.id
-
-        if ProductVariation.objects.filter(product=product.id, variation=variantoption.id, iu_id=iu_obj.id).exists():
+            
+        if ProductVariation.objects.filter(product=product.id, variation=variantoption.id, iu_id=iu_obj.id,is_active=True).exists():
             return Response({"status": "error", "message": "A product with the same variant already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -509,12 +518,79 @@ class ProductVariationAPI(APIView):
 
         
         product_variation_serializer = self.serializer_class(data=data)
-        if product_variation_serializer.is_valid():
-            product_variation_serializer.save()
-            return Response({"status": "success", "message": "Product with variant Created successfully", "data": product_variation_serializer.data['id']}, status=status.HTTP_201_CREATED)
-        return Response({"status": "error", "message": product_variation_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        if not product_variation_serializer.is_valid():
+            return Response({"status": "error", "message": product_variation_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        data=product_variation_serializer.save()
+
+
+        try:
+            seller_profile = SellerProfile.objects.get(user=request.user.id)
+        except SellerProfile.DoesNotExist:
+            return Response({"status": "error", "message": "Seller profile not found"}, status=status.HTTP_404_NOT_FOUND)
 
       
+        
+        try:
+            template = TemplateMaster.objects.get(template_name="product creation alert")
+        except TemplateMaster.DoesNotExist:
+            return Response({"status": "error", "message": "Notification template not found"}, status=status.HTTP_400_BAD_REQUEST)
+       
+        manager_role = RoleMaster.objects.filter(name='manager').first()
+        if not manager_role:
+            return Response({"status": "error", "message": "Manager role not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        event = EventMaster.objects.get(
+            name=template.template_name,  
+            iu_id=iu_obj.id, 
+            sms_templateid=template.id,
+           
+        ) 
+       
+
+        if event:
+            product_name = data.product.name 
+            business_name=seller_profile.bussiness_name 
+            product_id = data.product.id
+            variant_name = variantoption.name  
+            product_variant_id = data.id  
+            seller_id = request.user.id  
+           
+            manager_ids = RoleMapping.objects.filter(role=manager_role).values_list('user_id', flat=True)
+           
+            
+            if manager_ids:
+                sender_id = request.user.id
+                for manager_id in manager_ids:
+                    manager = CustomUser.objects.filter(id=manager_id).first()
+                    manager_first_name = manager.first_name if manager else "Manager"
+                    
+                    rendered_html_message = render_to_string('order/product_creation_notification.html', {
+                    'business_name': business_name,
+                    'seller_id':seller_id,
+                    'product_id':product_id,
+                    'product_name': product_name,
+                    'product_variant_id': product_variant_id,
+                    'variant_name':variant_name,
+                    'manager_name': manager_first_name
+                    })
+                  
+
+                    overallnotification(
+                        sender_id=sender_id,
+                        receiver_id=manager_id,
+                        event=event.id,
+                        subject='New Product was Created',
+                        message="A new product has been created.",
+                        notification_message=rendered_html_message,
+                        iu_id=iu_obj.id,
+                        request_user=request.user.id
+                    )
+                   
+            return Response({"status": "success", "message": "Product was created and notifications sent successfully"}, status=status.HTTP_201_CREATED)
+        else:
+            return Response({"status": "error", "message": "Event not found or conditions not met"}, status=status.HTTP_404_NOT_FOUND)
+
+            
     def put(self, request):
         role = get_user_roles(request)
         if role != 'seller':
@@ -582,7 +658,7 @@ class ProductVariationAPI(APIView):
 
 
         
-class ManagerAPI(APIView):
+class ManagerdetailsAPI(APIView):
     serializer_class=ProductMasterSerializer
 
     def get(self,request):
@@ -633,30 +709,162 @@ class ManagerAPI(APIView):
         if not product_variations.exists():
             return Response({"status": "error", "message": "Product cannot be approved as it has no associated variants"}, status=status.HTTP_400_BAD_REQUEST)
         
-        
-        if productmaster.product_status != 'pending':
-            return Response({"status": "error", "message": "Product status must be 'pending' to approve"}, status=status.HTTP_400_BAD_REQUEST)
-        
-    
         product_status = data.get('status')
+
         if product_status == 'approved':
             data['product_status'] = product_status
             data['is_approved'] = True
             data['approved_by'] = request.user.id
+            
+        elif product_status == 'rejected':
+            data['product_status'] = product_status
+            data['is_approved'] = False
+            data['modified_by'] = request.user.id
+            print("hii")
         else:
             return Response({"status": "error", "message": "Invalid status name"}, status=status.HTTP_400_BAD_REQUEST)
         
-        data['modified_by'] = request.user.id
 
-        
         serializer = self.serializer_class(productmaster, data=data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({"status": "success", "message": "Product approved successfully"}, status=status.HTTP_200_OK)
-        return Response({"status": "error", "message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        if not serializer.is_valid(): 
+            return Response({"status": "error", "message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        data=serializer.save()
+         
+        try:
+            template = TemplateMaster.objects.get(template_name="product approved/rejected alert")
+        except TemplateMaster.DoesNotExist:
+            return Response({"status": "error", "message": "Notification template not found"}, status=status.HTTP_400_BAD_REQUEST)
+       
+        product = get_object_or_404(ProductMaster, id=product_id)
+        seller_id = product.seller.id
+        
+        
+        try:
+            template = TemplateMaster.objects.get(template_name="product approved/rejected alert")
+        except TemplateMaster.DoesNotExist:
+            return Response({"status": "error", "message": "Notification template not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+        event = EventMaster.objects.get(
+            name=template.template_name,
+            iu_id=iu_id.id,
+            sms_templateid=template.id,
+        )
+
+        if event:
+            product_name=product.name,
+            product_status=data.product_status,
+           
+        
+            rendered_html_message = render_to_string('order/product_status_notification.html', {
+            'product_name': product_name[0],
+            'product_status': product_status[0]
+        })
+
+            sender_id = request.user.id
+
+            overallnotification(
+                sender_id=sender_id,
+                receiver_id=seller_id,
+                event=event.id,
+                subject='Product Status detail',
+                message="Notification for seller",
+                notification_message=rendered_html_message,
+                iu_id=iu_id.id,
+                request_user=request.user.id
+            )
+           
+
+            return Response({"status": "success", "message": "Product status updated and notification sent to the seller"}, status=status.HTTP_201_CREATED)
+        else:
+             return Response({"status": "error", "message": "Event not found or conditions not met"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class BuyerView(APIView):
+    serializer_class=ProductVariationSerializer
+
+    def get(self, request):
+        try:
+           
+            role = get_user_roles(request)
+            if role != 'consumer':
+                return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
+
+            
+            current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+            iu_id = get_iuobj(current_site)
+            
+            product_id = request.query_params.get('id')
+            fields = ['id', 'variation', 'total_price', 'selling_price', 'stock', 'tax_rate', 'tax_amount']
+
+            product_variant_data = []
+
+            if product_id:
+                
+                product = ProductMaster.objects.filter(id=product_id, is_published=True, iu_id=iu_id, is_active=True, is_approved=True).first()
+
+                if not product:
+                    return Response({"status": "error", "message": "Product is not published"}, status=status.HTTP_400_BAD_REQUEST)
+
+               
+                product_variants = ProductVariation.objects.filter(product=product_id, is_active=True, iu_id=iu_id)
+                if product_variants.exists():
+                    
+                    serializer = self.serializer_class(product_variants, fields=fields, many=True)
+                    variant_data = serializer.data
+
+                    product_variant_data.append({"product_id": product.id,"product_name": product.name,"variants": variant_data})
+
+                    for variant in variant_data:
+                       
+                        variation_name = VariantOption.objects.filter(id=variant['variation']).first()
+                        if variation_name:
+                            variant["variation"] = variation_name.name  
+                        else:
+                            variant["variation"] = []          
+                       
+                else:
+                   
+                    product_variant_data.append({
+                        "product_id": product.id,
+                        "product_name": product.name,
+                        "variants": []
+                    })
+
+            else:
+                
+                products = ProductMaster.objects.filter(is_published=True, iu_id=iu_id, is_active=True, is_approved=True)
+
+                for product in products:
+                    product_data = {
+                        "product_id": product.id,
+                        "product_name": product.name,
+                        "variants": []
+                    }
+
+                    
+                    product_variants = ProductVariation.objects.filter(product=product.id, is_active=True, iu_id=iu_id)
+                    if product_variants.exists():
+                        
+                        serializer = self.serializer_class(product_variants, fields=fields, many=True)
+                        for variant in serializer.data:
+                           
+                            variation_name = VariantOption.objects.filter(id=variant['variation']).first()
+                            if variation_name:
+                                variant["variation"] = variation_name.name  
+                            else:
+                                variant["variation"] = []
+                           
+                        product_data["variants"] = serializer.data
+                    product_variant_data.append(product_data)
+            return Response({"status": "success", "message": "Data fetched successfully", "data": product_variant_data}, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 
 # paymenttypemaster crud i.e mode of payment cards,cash on delivery,upi etc
+
 class PaymentTypeMasterView(APIView):
     def get(self, request):
         payment_type_id = request.query_params.get('payment_type_id', None)
@@ -766,6 +974,9 @@ class PaymentTypeMasterView(APIView):
         else:
             transaction.rollback()
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 class ProductMasterView(APIView):
     serializer_class=ProductMasterSerializer
     def get(self,request,id=None):
