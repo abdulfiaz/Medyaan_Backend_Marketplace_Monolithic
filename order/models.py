@@ -167,7 +167,7 @@ class CartItem(BaseModel):
 
 class FeedbackDetails(BaseModel):
     user=models.ForeignKey(CustomUser,on_delete=models.CASCADE,related_name = 'feedbackdetails_user')
-    product=models.ForeignKey(ProductMaster,on_delete=models.CASCADE,related_name = 'feedbackdetails_product')
+    product=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,related_name = 'feedbackdetails_product')
     comments=models.TextField(blank=True,null=True)
     ratings=models.IntegerField(default=1)
     images=ArrayField(models.TextField(null=True,blank=True,default=dict))
