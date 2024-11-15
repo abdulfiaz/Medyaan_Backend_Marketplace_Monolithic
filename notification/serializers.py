@@ -28,4 +28,4 @@ class NotificationSerializer(serializers.ModelSerializer):
     event=serializers.PrimaryKeyRelatedField(queryset=EventMaster.objects.all())
     class Meta:
         model=Notification
-        fields=['id','event','sender','receiver','subject','message','email_id','notification_message','redirect_link','role','iu_id']
+        fields=['id','event','sender','receiver','subject','message','email_id','notification_message','redirect_link','role','iu_id','email_content']

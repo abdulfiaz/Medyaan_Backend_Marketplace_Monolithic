@@ -56,7 +56,8 @@ def create_notification(data, request_user):
     'redirect_link': data.get('redirect_link', "https://example.com/"),
     'role': data['role'],
     'email_id':data['email_id'],
-    'iu_id': iu_id
+    'iu_id': iu_id,
+    'email_content': data.get('email_content') 
     }
     try:
         serializer = NotificationSerializer(data=notification_data)

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #333;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 20px;
+        }
+        .message-container {
+            background-color: #ffffff;
+            padding: 30px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            max-width: 600px;
+            margin: auto;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        }
+        h2 {
+            text-align: center;
+        }
+        h2 {
+            color: #195a61;
+            font-size: 18px;
+            margin-top: 0;
+        }
+        p {
+            font-size: 16px;
+            color: #0d232b;
+            line-height: 1.6;
+        }
+        .greeting {
+            margin-bottom: 20px;
+        }
+        ul {
+            padding-left: 20px;
+            margin: 15px 0;
+        }
+        ul li {
+            font-size: 15px;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="message-container">
+        <h2>{{ subject }}</h2>
+        <p class="greeting"></p></pclass>>Dear Manager,</p>
+        <p>{{ message }}</p>
+        
+        <ul>
+            <li><strong>Application ID:</strong> {{ application_id }}</li>
+            <li><strong>Details:</strong> {{ details }}</li>
+        </ul>
+
+        <div class="footer">
+            <p>Thank you for using our platform! If you have any questions, please contact us at support@platform.com.</p>
+        </div>
+    </div>
+</body>
+</html>
