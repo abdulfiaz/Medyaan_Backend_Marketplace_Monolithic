@@ -164,6 +164,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'marketplaceecommerce24@gmail.com'
 EMAIL_HOST_PASSWORD = 'vydj berr yepr pibn'
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 ROOT_URLCONF = 'sdd_marketplace.urls'
 
