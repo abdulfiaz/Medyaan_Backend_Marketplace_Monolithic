@@ -31,7 +31,7 @@ class ProductMaster(BaseModel):
     is_published=models.BooleanField(default=False)
     approved_by=models.IntegerField(blank=True,null=True)#check approved by
     product_status=models.CharField(max_length=20,default='pending')#initial status for the product
-    image=ArrayField(models.TextField(),blank=True,null=True)
+    images=ArrayField(models.TextField(),blank=True,null=True)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
 
     class Meta:

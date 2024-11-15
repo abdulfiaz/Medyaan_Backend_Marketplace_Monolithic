@@ -36,6 +36,7 @@ class Notification(BaseModel):
     redirect_link = models.CharField(max_length=100,blank=True, null=True) 
     role = models.CharField(max_length=100, null=True, blank=True)
     iu_id = models.ForeignKey(IUMaster, related_name='Notification_iu_id', on_delete=models.DO_NOTHING)
+    email_content=models.TextField(blank=True,null=True)
 
     class Meta:
         db_table = 'notification'
@@ -57,7 +58,7 @@ def send_notification_in_email(sender, instance, created, **kwargs):
 
         sender_email = get_email(sender_id)
         receiver_email = get_email(receiver_id)
-
+        email_content=instance.email_content
        
         if not sender_email or not receiver_email:
             return None
@@ -68,7 +69,7 @@ def send_notification_in_email(sender, instance, created, **kwargs):
         subject = instance.subject
         email = EmailMessage(
             subject=subject,
-            body=message,
+            body=email_content,
             from_email=sender_email,
             to=[receiver_email]
         )
