@@ -20,27 +20,22 @@ from django.utils import timezone
 from sdd_marketplace import settings
 import boto3
 from botocore.config import Config
-
-
-              
-class UploadImagesAPI(APIView):
-    def post(self,request):
-        try:
-            data=request.data
-            image = request.FILES.getlist('images', None)  
-            image_urls = []
-            if  not image: 
-                return Response({"status":"error","message":'image not found'}, status=status.HTTP_400_BAD_REQUEST)       
-            for image_file in image:
-                file_name = image_file.name
-                image_url = upload_image_s3(image_file, file_name)
-                if image_url:
-                  image_urls.append(image_url)
-            return Response({"status": "success", "message":"images url created","data":image_urls}, status=status.HTTP_200_OK)
-        except Exception as e:
-            transaction.rollback()  
-            return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+from django.conf import settings
+from adminapp.iudetail import get_iuobj
+from users.auth import get_user_roles
+from django.shortcuts import get_object_or_404
+from django.db import transaction
+from order.serializers import *
+from users.models import *
+from order.models import *
+from notification.models import *
+from adminapp.utils import *
+from adminapp.models import *
+from rest_framework.views import APIView,status
+from rest_framework.response import Response
+from django.shortcuts import render
+from django.template.loader import render_to_string
+from order.utils import *
 
 
 class CategoryMasterAPI(APIView):
@@ -115,6 +110,18 @@ class CategoryMasterAPI(APIView):
         data['created_by'] = request.user.id
         data['iu_id'] = iu_id.id
 
+        image = request.FILES.getlist('image', None)
+        image_urls = []
+        if  not image:
+            return Response({"status":"error","message":'image not found'}, status=status.HTTP_400_BAD_REQUEST)
+        for image_file in image:
+            file_name = image_file.name
+            image_url = upload_image_s3(image_file, file_name)
+            if image_url:
+                image_urls.append(image_url)
+        data.setlist('image',image_urls)
+        
+
         existing_category = ProductCategoryMaster.objects.filter(name__iexact=data.get('name'), is_active=True,iu_id=iu_id).exists()
         if existing_category:
             return Response({"status":"error","message":'Category with this name already exists'}, status=status.HTTP_400_BAD_REQUEST)
@@ -187,7 +194,7 @@ class CategoryMasterAPI(APIView):
             return Response({"status":"error","message":"Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
         
         data = request.data
-        id = request.query_params.get('id')
+        id = data.get('category _id')
         
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
@@ -317,7 +324,7 @@ class VariantMasterAPI(APIView):
         iu_id = get_iuobj(current_site)
         data=request.data
         data['iu_id']=iu_id.id
-        id = request.query_params.get('id')
+        id = data.get('variantmaster_id')
         
         variant= get_object_or_404(VariantMaster, id=id,iu_id=iu_id)
 
@@ -375,10 +382,11 @@ class VariantOptionAPI(APIView):
         iu_id = get_iuobj(current_site)
         data = request.data
         data['iu_id'] = iu_id.id
-         
-
 
         variation_id = request.data.get('variation')
+        image = request.FILES.getlist('image', None)
+        
+                                         
         variant_option= get_object_or_404(VariantMaster, id=variation_id, is_active=True,iu_id=iu_id)
 
       
@@ -387,8 +395,17 @@ class VariantOptionAPI(APIView):
         if existing:
             return Response({"status":"error","message":"variant with this category already exists"}, status=status.HTTP_400_BAD_REQUEST)
         data['created_by'] = request.user.id
-        data['category'] = variant_option.id 
-
+        data['variation'] = variant_option.id 
+        
+        image_urls = []
+        if  not image:
+            return Response({"status":"error","message":'image not found'}, status=status.HTTP_400_BAD_REQUEST)
+        for image_file in image:
+            file_name = image_file.name
+            image_url = upload_image_s3(image_file, file_name)
+            if image_url:
+                image_urls.append(image_url)
+        data.setlist('image',image_urls)
        
         variantoption_serializer = self.serializer_class(data=data)
 
@@ -439,7 +456,7 @@ class VariantOptionAPI(APIView):
         data=request.data
         data['iu_id']=iu_id.id
         
-        id = request.query_params.get('id')
+        id = data.get('variant_option_id')
         variant= get_object_or_404(VariantOption, id=id,iu_id=iu_id)
 
         if variant:
@@ -496,6 +513,7 @@ class ProductVariationAPI(APIView):
             return Response({"status":"error","message":"Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
 
         product_id = request.data.get('product_id')
+        image = request.FILES.getlist('image', None)
         product = get_object_or_404(ProductMaster, id=product_id, is_active=True)
         
         if product.seller.id != request.user.id:
@@ -544,6 +562,17 @@ class ProductVariationAPI(APIView):
         data['tax_rate'] = tax_rate
 
         
+        image_urls = []
+        if  not image:
+            return Response({"status":"error","message":'image not found'}, status=status.HTTP_400_BAD_REQUEST)
+        for image_file in image:
+            file_name = image_file.name
+            image_url = upload_image_s3(image_file, file_name)
+            if image_url:
+                image_urls.append(image_url)
+        data.setlist('image',image_urls)
+
+        
         product_variation_serializer = self.serializer_class(data=data)
         if not product_variation_serializer.is_valid():
             return Response({"status": "error", "message": product_variation_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -588,27 +617,39 @@ class ProductVariationAPI(APIView):
             if manager_ids:
                 sender_id = request.user.id
                 for manager_id in manager_ids:
-                    manager = CustomUser.objects.filter(id=manager_id).first()
-                    manager_first_name = manager.first_name if manager else "Manager"
-                    
-                    rendered_html_message = render_to_string('order/product_creation_notification.html', {
-                    'business_name': business_name,
-                    'seller_id':seller_id,
-                    'product_id':product_id,
-                    'product_name': product_name,
-                    'product_variant_id': product_variant_id,
-                    'variant_name':variant_name,
-                    'manager_name': manager_first_name
-                    })
-                  
+                    manager = UserPersonalProfile.objects.filter(user_id=manager_id).first()
+                    manager_first_name = manager.firstname if manager else ()
 
+                    content={
+                        'business_name': business_name,
+                        'seller_id':seller_id,
+                        'product_id':product_id,
+                        'product_name': product_name,
+                        'product_variant_id': product_variant_id,
+                        'variant_name':variant_name,
+                        'manager_name': manager_first_name
+                        }
+                    
+                    rendered_html_message = render_to_string('order/product_creation_notification.html',content)
+
+                    message=template.content.format(business_name=business_name,
+                    seller_id=seller_id,
+                    product_id=product_id,
+                    product_name=product_name,
+                    product_variant_id=product_variant_id,
+                    variant_name=variant_name,
+                    manager_name=manager_first_name
+                    )
+
+                  
                     overallnotification(
                         sender_id=sender_id,
                         receiver_id=manager_id,
                         event=event.id,
                         subject='New Product was Created',
                         message="A new product has been created.",
-                        notification_message=rendered_html_message,
+                        notification_message=message,
+                        email_content=rendered_html_message,
                         iu_id=iu_obj.id,
                         request_user=request.user.id
                     )
@@ -673,7 +714,7 @@ class ProductVariationAPI(APIView):
         data=request.data
         data['iu_id']=iu_id.id
         
-        id = request.query_params.get('id')
+        id = data.get('product_variantion_id')
         Product_variation= get_object_or_404(ProductVariation,id=id,iu_id=iu_id)
 
         if  Product_variation:
@@ -688,29 +729,57 @@ class ProductVariationAPI(APIView):
 class ManagerdetailsAPI(APIView):
     serializer_class=ProductMasterSerializer
 
-    def get(self,request):
-        try:
-            role=get_user_roles(request)
-            if role != 'manager':
-                return Response({"status":"error","message":"Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
-            current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-            iu_id = get_iuobj(current_site)
+    def fetch_user_ids(self,role_name): 
+        role_id = RoleMaster.objects.filter(name=role_name).values_list('id', flat=True).first()
+        return set(RoleMapping.objects.filter(role_id=role_id).values_list('user_id', flat=True)) if role_id else set()
 
-            data = request.data
-            data['iu_id'] = iu_id.id
-            fields=['id','seller','subcategory','name','product_status']
+    def fetch_user_data(self,user_ids, include_seller_data=False):
+        users = CustomUser.objects.filter(id__in=user_ids).values('id', 'email', 'mobile_number')
+        first_names = {profile['user_id']: profile['firstname'] for profile in UserPersonalProfile.objects.filter(user_id__in=user_ids).values('user_id', 'firstname')}
+        seller_data = {seller['user_id']: seller for seller in SellerProfile.objects.filter(user_id__in=user_ids).values('user_id','id', 'bussiness_name')} if include_seller_data else {}
 
-            product_list=[]
-            status_filter = request.query_params.get('status', 'pending') 
-            product=ProductMaster.objects.filter(product_status=status_filter,is_active=True)
-            pendings= self.serializer_class(product, fields=fields, many=True)
-            product_list=pendings.data
+        return [
+            {**user, 'name': first_names.get(user['id']), **(seller_data.get(user['id'], {}))}
+            for user in users
+        ]
 
-            return Response({"status": "success", "message":"Data fetched successfully","data":product_list}, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    def get_user_data(self,role=None): 
+        if role:
+            user_ids = self.fetch_user_ids(role) 
+            if not user_ids:
+                return Response({"status": "error", "message": "No users found"}, status=status.HTTP_400_BAD_REQUEST)
+            data = self.fetch_user_data(user_ids, include_seller_data=(role == 'seller')) 
+            return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
         
+        buyers =self.fetch_user_ids('consumer') - self.fetch_user_ids('seller') #no role provided
+        return Response({"status": "success","buyers": self.fetch_user_data(buyers),"sellers":self. fetch_user_data(self.fetch_user_ids('seller'), include_seller_data=True)}, status=status.HTTP_200_OK)
 
+
+    def get(self, request):
+        try:
+            role = get_user_roles(request)
+            if role != 'manager':
+                return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            
+            status_filter = request.query_params.get('status', None)
+            if status_filter: 
+                if status_filter in ['pending', 'approved', 'rejected']:
+                    product = ProductMaster.objects.filter(product_status=status_filter, is_active=True)
+                    product_list = self.serializer_class(product, fields=['id', 'seller', 'subcategory', 'name', 'product_status'], many=True).data
+                    return Response({
+                        "status": "success",
+                        "message": f"Products fetched with status: {status_filter}",
+                        "products": product_list
+                    }, status=status.HTTP_200_OK)
+                return Response({"status": "error", "message": "Invalid status provided"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            return self.get_user_data(request.query_params.get('role')) 
+
+        except Exception as e:
+            return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+                
     def put(self, request):
         role = get_user_roles(request)
         if role != 'manager':
@@ -745,9 +814,8 @@ class ManagerdetailsAPI(APIView):
             
         elif product_status == 'rejected':
             data['product_status'] = product_status
-            data['is_approved'] = False
             data['modified_by'] = request.user.id
-            print("hii")
+            
         else:
             return Response({"status": "error", "message": "Invalid status name"}, status=status.HTTP_400_BAD_REQUEST)
         
@@ -780,12 +848,15 @@ class ManagerdetailsAPI(APIView):
         if event:
             product_name=product.name,
             product_status=data.product_status,
+
+            mail_content={
+                'product_name': product_name[0] if isinstance(product_name, (list, tuple)) and product_name else "Unknown Product",
+                'product_status': product_status[0] if isinstance(product_status, (list, tuple)) and product_status else "Unknown Status"
+                }
            
         
-            rendered_html_message = render_to_string('order/product_status_notification.html', {
-            'product_name': product_name[0],
-            'product_status': product_status[0]
-        })
+            rendered_html_message = render_to_string('order/product_status_notification.html',mail_content)
+            message=template.content.format(product_name=mail_content['product_name'],product_status=mail_content['product_status'])
 
             sender_id = request.user.id
 
@@ -795,7 +866,8 @@ class ManagerdetailsAPI(APIView):
                 event=event.id,
                 subject='Product Status detail',
                 message="Notification for seller",
-                notification_message=rendered_html_message,
+                notification_message=message,
+                email_content=rendered_html_message,
                 iu_id=iu_id.id,
                 request_user=request.user.id
             )
@@ -887,6 +959,222 @@ class BuyerView(APIView):
 
         except Exception as e:
             return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+# paymenttypemaster crud i.e mode of payment cards,cash on delivery,upi etc
+
+class PaymentTypeMasterView(APIView):
+    
+    def get(self, request):
+        payment_type_id = request.query_params.get('payment_type_id', None)
+        role_name = get_user_roles(request)
+        domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+
+        if role_name != 'admin':
+            return Response({"status": "error", "message": "only admin can view payment type master details"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            if payment_type_id:
+                payment_type_master = PaymentTypeMaster.objects.get(id=payment_type_id, iu_id=iu_id, is_active=True)
+                serializer = GetPaymentTypeMasterSerializer(payment_type_master)  
+            else:
+                
+                payment_type_master = PaymentTypeMaster.objects.filter(iu_id=iu_id, is_active=True)
+                serializer = GetPaymentTypeMasterSerializer(payment_type_master, many=True)  
+
+            return Response({"status": "success", "message": "data retrieved successfully", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        except PaymentTypeMaster.DoesNotExist:
+            return Response({"status": "error", "message": "PaymentType not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def post(self,request):
+        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+
+        role_name = get_user_roles(request)
+
+        if role_name != 'admin':
+            return Response({"status":"error","message":"only admin can create PaymentTypeMaster"},status=status.HTTP_401_UNAUTHORIZED)
+        
+        transaction.set_autocommit(False)
+        data = request.data
+        data['created_by'] = request.user.id
+        data['iu_id'] = iu_id.id
+
+        serializer = PaymentTypeMasterSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            transaction.commit()
+            return Response({"status":"success","message":"paymenttype created successfully"},status=status.HTTP_201_CREATED)
+        else:
+            transaction.rollback()
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    
+    def put(self,request):
+        domain = request.META.get('HTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+        role_name = get_user_roles(request)
+        payment_type_master_id = request.data.get('id')
+
+        if not payment_type_master_id :
+            return Response({"status":"error","message":"payment_type_master id is required"},status=status.HTTP_400_BAD_REQUEST)
+
+        if role_name != 'admin':
+            return Response({"status":"error","message":"only admin can update this"},status=status.HTTP_401_UNAUTHORIZED)
+        
+        try:
+            payment_type_obj = PaymentTypeMaster.objects.get(id=payment_type_master_id,iu_id=iu_id,is_active=True)
+        except PaymentTypeMaster.DoesNotExist:
+            return Response({"status": "error", "message": "PaymentTypeMaster not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        transaction.set_autocommit(False)
+        data = request.data
+        data['modified_by']=request.user.id
+        data['iu_id']=iu_id.id
+
+        serializer = PaymentTypeMasterSerializer(payment_type_obj,data=data,partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            transaction.commit()
+            return Response({"status": "success", "message": "PaymentType updated successfully"}, status=status.HTTP_200_OK)
+        else:
+            transaction.rollback()
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    def delete(self,request):
+        payment_type_master_id = request.data.get('id')
+        role_name = get_user_roles(request)
+        domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_master = get_iuobj(domain)
+
+        if not payment_type_master_id:
+            return Response({'status':'error','message':"id is required"},status=status.HTTP_404_NOT_FOUND)
+        
+        if role_name != 'admin':
+            return Response({"status":"error","message":"only admin can delete this"},status=status.HTTP_401_UNAUTHORIZED)
+        
+        try:
+            payment_type_obj = PaymentTypeMaster.objects.get(id=payment_type_master_id, iu_id=iu_master,is_active=True)
+        except PaymentTypeMaster.DoesNotExist:
+            return Response({"status": "error", "message": "id not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        transaction.set_autocommit(False)
+        serializer = PaymentTypeMasterSerializer(payment_type_obj, data={'is_active': False,'modified_by':request.user.id}, partial=True)
+        
+        if serializer.is_valid():
+            serializer.save()
+            transaction.commit()
+            return Response({"status": "success", "message": "payment_type deleted successfully"}, status=status.HTTP_200_OK)
+
+        else:
+            transaction.rollback()
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class ProductMasterView(APIView):
+    serializer_class=ProductMasterSerializer
+    def get(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if id:
+            product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
+            serializer=self.serializer_class(product)
+        else:
+            product=ProductMaster.objects.filter(is_active=True)
+            serializer = self.serializer_class(product, many=True)
+
+        return Response({"status":"success","message":"successfully received data","data":serializer.data},status=status.HTTP_200_OK)
+
+    def post(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        data = request.data
+        data['seller']=request.user.id
+
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'failure', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        data['iu_id'] = iu_id.id
+
+        product=self.serializer_class(data=data)
+        if product.is_valid():
+            serializer_iu=product.save(created_by=request.user.id)
+
+            return Response({"status":"success","message":"Successfully created","data":serializer_iu.id},status=status.HTTP_201_CREATED)
+        else:
+            return Response({"status":"error","message":"product is not create","data":product.errors},status=status.HTTP_400_BAD_REQUEST)
+            
+    def put(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
+       
+        serializer=self.serializer_class(product,data=request.data,partial=True)
+        if serializer.is_valid():
+            serializer.save(modified_by=request.user.id)
+            return Response({"status":"success","message":"successfully update the data"},status=status.HTTP_200_OK)
+        else:
+            return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self,request,id=None):
+        roles = get_user_roles(request)
+        if roles !="seller":
+            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
+        if product:            
+            product.is_active = False
+            product.save()
+            return Response({"status": "success", "message": "Product deleted successfully"}, status=status.HTTP_200_OK)
+        else:
+            return Response({"status":"error","message":"data  is not delete"},status=status.HTTP_400_BAD_REQUEST)
+
+
+
+              
+class UploadImagesAPI(APIView):
+    def post(self,request):
+        try:
+            data=request.data
+            image = request.FILES.getlist('images', None)  
+            image_urls = []
+            if  not image: 
+                return Response({"status":"error","message":'image not found'}, status=status.HTTP_400_BAD_REQUEST)       
+            for image_file in image:
+                file_name = image_file.name
+                image_url = upload_image_s3(image_file, file_name)
+                if image_url:
+                  image_urls.append(image_url)
+            return Response({"status": "success", "message":"images url created","data":image_urls}, status=status.HTTP_200_OK)
+        except Exception as e:
+            transaction.rollback()  
+            return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
