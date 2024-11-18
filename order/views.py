@@ -159,7 +159,6 @@ class CategoryMasterAPI(APIView):
             transaction.rollback()  
             return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-
     def put(self, request):
         role = get_user_roles(request)
         if role != 'manager':
@@ -250,7 +249,6 @@ class VariantMasterAPI(APIView):
         except Exception as e:
             return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
       
-
     def post(self,request):
         role=get_user_roles(request)
         if role != 'seller':
@@ -282,7 +280,6 @@ class VariantMasterAPI(APIView):
             return Response({"status":"success","message":"Variant Master created successfully","data":variantmaster_serializer.data['id']},status=status.HTTP_201_CREATED)
         return Response({"status":"error","message":variantmaster_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
-
     def put(self, request):
         role=get_user_roles(request)
         if role != 'seller':
@@ -313,7 +310,6 @@ class VariantMasterAPI(APIView):
             return Response({"status": "success","message":"Updated successfully"}, status=status.HTTP_200_OK)
         return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
        
-
     def delete(self,request):
         role=get_user_roles(request)
         if role != 'seller':
@@ -446,7 +442,6 @@ class VariantOptionAPI(APIView):
             return Response({"status": "success","message":"Updated successfully"}, status=status.HTTP_200_OK)
         return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
         
-
     def delete(self,request):
         role=get_user_roles(request)
         if role != 'seller':
@@ -506,7 +501,6 @@ class ProductVariationAPI(APIView):
         except Exception as e:
             return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-
     def post(self,request):
         role = get_user_roles(request)
         if role != 'seller':
@@ -657,7 +651,6 @@ class ProductVariationAPI(APIView):
             return Response({"status": "success", "message": "Product was created and notifications sent successfully"}, status=status.HTTP_201_CREATED)
         else:
             return Response({"status": "error", "message": "Event not found or conditions not met"}, status=status.HTTP_404_NOT_FOUND)
-
             
     def put(self, request):
         role = get_user_roles(request)
@@ -704,7 +697,6 @@ class ProductVariationAPI(APIView):
             return Response({"status": "success", "message": "Updated successfully"}, status=status.HTTP_200_OK)
         return Response({"status": "error", "message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-
     def delete(self,request):
         role=get_user_roles(request)
         if role != 'seller':
@@ -724,8 +716,7 @@ class ProductVariationAPI(APIView):
             return Response({"status":"success","message": "Deleted successfully"}, status=status.HTTP_200_OK)
         return Response({"status":"error","message":"variantoption not found"}, status=status.HTTP_404_NOT_FOUND)
 
-
-        
+       
 class ManagerdetailsAPI(APIView):
     serializer_class=ProductMasterSerializer
 
@@ -778,7 +769,6 @@ class ManagerdetailsAPI(APIView):
 
         except Exception as e:
             return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
                 
     def put(self, request):
         role = get_user_roles(request)
@@ -961,124 +951,9 @@ class BuyerView(APIView):
             return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
-# paymenttypemaster crud i.e mode of payment cards,cash on delivery,upi etc
-
-class PaymentTypeMasterView(APIView):
-    
-    def get(self, request):
-        payment_type_id = request.query_params.get('payment_type_id', None)
-        role_name = get_user_roles(request)
-        domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_id = get_iuobj(domain)
-
-        if role_name != 'admin':
-            return Response({"status": "error", "message": "only admin can view payment type master details"}, status=status.HTTP_401_UNAUTHORIZED)
-
-        try:
-            if payment_type_id:
-                payment_type_master = PaymentTypeMaster.objects.get(id=payment_type_id, iu_id=iu_id, is_active=True)
-                serializer = GetPaymentTypeMasterSerializer(payment_type_master)  
-            else:
-                
-                payment_type_master = PaymentTypeMaster.objects.filter(iu_id=iu_id, is_active=True)
-                serializer = GetPaymentTypeMasterSerializer(payment_type_master, many=True)  
-
-            return Response({"status": "success", "message": "data retrieved successfully", "data": serializer.data}, status=status.HTTP_200_OK)
-
-        except PaymentTypeMaster.DoesNotExist:
-            return Response({"status": "error", "message": "PaymentType not found"}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        
-    def post(self,request):
-        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
-        iu_id = get_iuobj(domain)
-
-        role_name = get_user_roles(request)
-
-        if role_name != 'admin':
-            return Response({"status":"error","message":"only admin can create PaymentTypeMaster"},status=status.HTTP_401_UNAUTHORIZED)
-        
-        transaction.set_autocommit(False)
-        data = request.data
-        data['created_by'] = request.user.id
-        data['iu_id'] = iu_id.id
-
-        serializer = PaymentTypeMasterSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save()
-            transaction.commit()
-            return Response({"status":"success","message":"paymenttype created successfully"},status=status.HTTP_201_CREATED)
-        else:
-            transaction.rollback()
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-    
-    def put(self,request):
-        domain = request.META.get('HTTP_ORIGIN',settings.APPLICATION_HOST)
-        iu_id = get_iuobj(domain)
-        role_name = get_user_roles(request)
-        payment_type_master_id = request.data.get('id')
-
-        if not payment_type_master_id :
-            return Response({"status":"error","message":"payment_type_master id is required"},status=status.HTTP_400_BAD_REQUEST)
-
-        if role_name != 'admin':
-            return Response({"status":"error","message":"only admin can update this"},status=status.HTTP_401_UNAUTHORIZED)
-        
-        try:
-            payment_type_obj = PaymentTypeMaster.objects.get(id=payment_type_master_id,iu_id=iu_id,is_active=True)
-        except PaymentTypeMaster.DoesNotExist:
-            return Response({"status": "error", "message": "PaymentTypeMaster not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        transaction.set_autocommit(False)
-        data = request.data
-        data['modified_by']=request.user.id
-        data['iu_id']=iu_id.id
-
-        serializer = PaymentTypeMasterSerializer(payment_type_obj,data=data,partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            transaction.commit()
-            return Response({"status": "success", "message": "PaymentType updated successfully"}, status=status.HTTP_200_OK)
-        else:
-            transaction.rollback()
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-    def delete(self,request):
-        payment_type_master_id = request.data.get('id')
-        role_name = get_user_roles(request)
-        domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_master = get_iuobj(domain)
-
-        if not payment_type_master_id:
-            return Response({'status':'error','message':"id is required"},status=status.HTTP_404_NOT_FOUND)
-        
-        if role_name != 'admin':
-            return Response({"status":"error","message":"only admin can delete this"},status=status.HTTP_401_UNAUTHORIZED)
-        
-        try:
-            payment_type_obj = PaymentTypeMaster.objects.get(id=payment_type_master_id, iu_id=iu_master,is_active=True)
-        except PaymentTypeMaster.DoesNotExist:
-            return Response({"status": "error", "message": "id not found"}, status=status.HTTP_404_NOT_FOUND)
-        
-        transaction.set_autocommit(False)
-        serializer = PaymentTypeMasterSerializer(payment_type_obj, data={'is_active': False,'modified_by':request.user.id}, partial=True)
-        
-        if serializer.is_valid():
-            serializer.save()
-            transaction.commit()
-            return Response({"status": "success", "message": "payment_type deleted successfully"}, status=status.HTTP_200_OK)
-
-        else:
-            transaction.rollback()
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
 class ProductMasterView(APIView):
     serializer_class=ProductMasterSerializer
+    
     def get(self,request,id=None):
         roles = get_user_roles(request)
         if roles !="seller":
@@ -1153,8 +1028,6 @@ class ProductMasterView(APIView):
             return Response({"status": "success", "message": "Product deleted successfully"}, status=status.HTTP_200_OK)
         else:
             return Response({"status":"error","message":"data  is not delete"},status=status.HTTP_400_BAD_REQUEST)
-
-
 
               
 class UploadImagesAPI(APIView):
@@ -1176,11 +1049,10 @@ class UploadImagesAPI(APIView):
             return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-
 # paymenttypemaster crud i.e mode of payment cards,cash on delivery,upi etc
 
 class PaymentTypeMasterView(APIView):
+    
     def get(self, request):
         payment_type_id = request.query_params.get('payment_type_id', None)
         role_name = get_user_roles(request)
@@ -1290,87 +1162,9 @@ class PaymentTypeMasterView(APIView):
             transaction.rollback()
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
-
-class ProductMasterView(APIView):
-    serializer_class=ProductMasterSerializer
-    def get(self,request,id=None):
-        roles = get_user_roles(request)
-        if roles !="seller":
-            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
-        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_id = get_iuobj(current_site)
-
-        if not iu_id:
-            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        if id:
-            product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
-            serializer=self.serializer_class(product)
-        else:
-            product=ProductMaster.objects.filter(is_active=True)
-            serializer = self.serializer_class(product, many=True)
-
-        return Response({"status":"success","message":"successfully received data","data":serializer.data},status=status.HTTP_200_OK)
-
-    def post(self,request,id=None):
-        roles = get_user_roles(request)
-        if roles !="seller":
-            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
-        data = request.data
-        data['seller']=request.user.id
-
-        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_id = get_iuobj(current_site)
-
-        if not iu_id:
-            return Response({'status': 'failure', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        data['iu_id'] = iu_id.id
-
-        product=self.serializer_class(data=data)
-        if product.is_valid():
-            serializer_iu=product.save(created_by=request.user.id)
-
-            return Response({"status":"success","message":"Successfully created","data":serializer_iu.id},status=status.HTTP_201_CREATED)
-        else:
-            return Response({"status":"error","message":"product is not create","data":product.errors},status=status.HTTP_400_BAD_REQUEST)
-            
-    def put(self,request,id=None):
-        roles = get_user_roles(request)
-        if roles !="seller":
-            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
-        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_id = get_iuobj(current_site)
-
-        if not iu_id:
-            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
-       
-        serializer=self.serializer_class(product,data=request.data,partial=True)
-        if serializer.is_valid():
-            serializer.save(modified_by=request.user.id)
-            return Response({"status":"success","message":"successfully update the data"},status=status.HTTP_200_OK)
-        else:
-            return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self,request,id=None):
-        roles = get_user_roles(request)
-        if roles !="seller":
-            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
-        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_id = get_iuobj(current_site)
-
-        if not iu_id:
-            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
-        if product:            
-            product.is_active = False
-            product.save()
-            return Response({"status": "success", "message": "Product deleted successfully"}, status=status.HTTP_200_OK)
-        else:
-            return Response({"status":"error","message":"data  is not delete"},status=status.HTTP_400_BAD_REQUEST)
-        
         
 class OrderInvoiceAPI(APIView):
+    
     def get(self, request):
         user= request.user
         print(user)
@@ -1639,7 +1433,9 @@ class ProductFetchAPI(APIView):
             return Response({"status": "failed","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 class WishListAPI(APIView):
+    
     serializer_class=WishlistItemSerializers
+    
     def get_object(self,wishlist_id,user,iu_id):
         try:
             wishlist=WishlistItem.objects.get(id=wishlist_id,User=user,is_active=True,is_removed=False,iu_id=iu_id)
@@ -1700,7 +1496,9 @@ class WishListAPI(APIView):
         return Response({"status":"success","message":"product removed from wishlist"},status=status.HTTP_200_OK)
     
 class CartItemAPI(APIView):
+    
     serializer_class=CartItemSerializer
+    
     def get_object(self,cart_id,user,iu_id):
         try:
             cartitem=CartItem.objects.get(id=cart_id,User=user,is_active=True,iu_id=iu_id,is_removed=False)
@@ -1763,6 +1561,7 @@ class CartItemAPI(APIView):
             return Response({"status":"success","mesaage":"cart updated"},status=status.HTTP_200_OK)
         except Exception as e:
             return Response(str(e))
+    
     def delete(self,request):
         try:
             user=request.user
@@ -1787,7 +1586,9 @@ class CartItemAPI(APIView):
             return Response({"status":"error","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
 class FeedbackAPI(APIView):
+    
     serializerclass=FeedbackSerializer
+    
     def get(self,request):
         if not request.user:
             return Response({"status":"error","message":"Token not found"},status=status.HTTP_400_BAD_REQUEST)
@@ -1804,8 +1605,7 @@ class FeedbackAPI(APIView):
                     return Response({"status":"error","message":"feedback id not found"},status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({"status": "error","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-        
+       
     def post(self,request):
         role_name = get_user_roles(request)
         if not role_name in ['consumer']:
@@ -1831,4 +1631,4 @@ class FeedbackAPI(APIView):
                     return Response({"status":"error","message":" Haven't purchased this product"},status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
-    
+        
