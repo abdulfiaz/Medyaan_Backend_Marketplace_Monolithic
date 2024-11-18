@@ -15,6 +15,10 @@ from users.serializers import CustomUserSerializer, UserPersonalProfileSerialize
 from adminapp.iudetail import get_iuobj
 from users.auth import get_user_roles
 from rest_framework.exceptions import AuthenticationFailed
+from django.core.mail import send_mail 
+import random 
+from sdd_marketplace.settings import EMAIL_HOST_USER
+
 
 
 
@@ -344,3 +348,49 @@ class ChangePassword(APIView):
             return Response({"status":"success","message":"password change successfull"},status=status.HTTP_200_OK)
         except CustomUser.DoesNotExist:
             return Response({"status":"error","message":"user not exists"},status=status.HTTP_400_BAD_REQUEST)
+
+class ForgetPasswordAPI(APIView):
+    
+    def post(self,request):
+        data=request.data
+         
+        try:
+            user=CustomUser.objects.get(email=data['email'])    
+            otp=str(random.randint(100000,999999))
+            user.temp_code=otp
+            subject="Forgot poassword otp"
+            body=f"email:{data['email']} and your otp is {otp}"
+            
+            send_mail(subject,body,EMAIL_HOST_USER,[data['email']])
+            user.save()
+            return Response({"status":"sucess","message":"otp sent sucessfully"},status=status.HTTP_200_OK)
+            
+        except CustomUser.DoesNotExist:
+            return Response ({"status":"failed","message":"user with this email not found "},status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response ({"status":"failed","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)    
+        
+    def put(self,request):
+        data=request.data
+        
+        try:
+            user=CustomUser.objects.get(email=data['email'],is_active=True)
+            
+            subject="Changing the password"
+            body=f"your email :{data['email']} and your new password is {data['new_password']}\n\n successfully password changed"
+            if data['new_password']==data['confirm_password']:
+                if user.temp_code==data['temp_code']:
+                    user.password=make_password(data['new_password'])
+                    user.temp_code=None
+                    send_mail(subject,body,EMAIL_HOST_USER,data['email'])
+                    user.save()
+                    return Response({"status":"success","message":"Password updated successfully"},status=status.HTTP_200_OK)
+                else:
+                    return Response({"status":"error","message":"invalid otp"},status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({"status":"error","message":"new and confirm password is not same"},status=status.HTTP_400_BAD_REQUEST)
+                    
+        except CustomUser.DoesNotExist:
+            return Response ({"status":"failed","message":"user with this email not found "},status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response ({"status":"failed","message":str(e)},status=status.HTTP_500_INTERNAL_SERVER_ERROR)

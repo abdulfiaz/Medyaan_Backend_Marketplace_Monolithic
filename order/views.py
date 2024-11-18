@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.conf import settings
 from adminapp.iudetail import get_iuobj
 from users.auth import get_user_roles
@@ -13,6 +14,32 @@ from rest_framework.views import APIView,status
 from rest_framework.response import Response
 from django.shortcuts import render
 from django.template.loader import render_to_string
+from rest_framework.decorators import api_view
+from order.utils import *
+from django.utils import timezone
+from sdd_marketplace import settings
+import boto3
+from botocore.config import Config
+
+
+              
+class UploadImagesAPI(APIView):
+    def post(self,request):
+        try:
+            data=request.data
+            image = request.FILES.getlist('images', None)  
+            image_urls = []
+            if  not image: 
+                return Response({"status":"error","message":'image not found'}, status=status.HTTP_400_BAD_REQUEST)       
+            for image_file in image:
+                file_name = image_file.name
+                image_url = upload_image_s3(image_file, file_name)
+                if image_url:
+                  image_urls.append(image_url)
+            return Response({"status": "success", "message":"images url created","data":image_urls}, status=status.HTTP_200_OK)
+        except Exception as e:
+            transaction.rollback()  
+            return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 
@@ -1053,9 +1080,467 @@ class ProductMasterView(APIView):
             return Response({"status": "success", "message": "Product deleted successfully"}, status=status.HTTP_200_OK)
         else:
             return Response({"status":"error","message":"data  is not delete"},status=status.HTTP_400_BAD_REQUEST)
-
+        
+        
+class OrderInvoiceAPI(APIView):
+    def get(self, request):
+        user= request.user
+        print(user)
+        try:
+            current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST) 
+            iu_id = get_iuobj(current_site)
+            order_details = OrderDetails.objects.get(user=user,iu_id=iu_id ,is_active=True)
+        except OrderDetails.DoesNotExist:
+                return Response({"status":"error","message":"data not found"},status=status.HTTP_404_NOT_FOUND)
+            
+        try:
+            order_items = OrderItems.objects.filter(order=order_details,iu_id=iu_id)     
+            serializers = OrderItemsSerializer(order_items, many=True,fields=["delivered_location",'order_status'])
+            
+            return Response({"status": "success","message": "Data successfully retrieved", "data":serializers.data}, status=status.HTTP_200_OK)
 
         
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST) 
+ 
+    def post(self, request):
+        try:
+            data = request.data
+            users =request.user 
+            current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST) 
+            iu_id = get_iuobj(current_site)
+
+            user = CustomUser.objects.get(id=users.id,iu_id=iu_id, is_active=True)
+
+            transaction.set_autocommit(False)
+            order_details_data = {
+                'user': user.id,
+                'iu_id': iu_id.id,
+                'created_by': user.id,
+            }
+            order_details_serializer = OrderDetailsSerializer(data=order_details_data)
+            if order_details_serializer.is_valid():
+                order_details = order_details_serializer.save()
+            else:
+                return Response({"status": "error","message":order_details_serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+            invoice_model_data={
+                    'user': user.id,
+                    'iu_id': iu_id.id,
+                    'order_detail':order_details.id,
+                    'created_by': user.id,
+                    }
+            invoice_model_serializer=InvoiceModelSerializer(data=invoice_model_data)
+            
+            if invoice_model_serializer.is_valid():
+                invoice_model = invoice_model_serializer.save()
+            else:
+                return Response({"status": "error","message":invoice_model_serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+            total_price = 0
+            total=0 
+            tax_amount = 0
+            discount_amount = 0
+            overall_total = 0
+            for product in data['products']:
+                product_detail = ProductVariation.objects.get(id=product['product_id'],iu_id=iu_id, is_active=True)
+                
+                if product_detail.stock < product['product_quantity']:
+                    return Response({"status": "error", "message": f"Insufficient stock for product {product_detail.product.name}"},status=status.HTTP_400_BAD_REQUEST)
+
+                product_detail.stock -= product['product_quantity']
+                product_detail.save()
+                
+                variant_option = VariantOption.objects.get(id=product_detail.variation.id,iu_id=iu_id, is_active=True)
+                seller = SellerProfile.objects.get(user=product_detail.product.seller,iu_id=iu_id, is_active=True)
+
+                order_item_data = {
+                    'order': order_details.id,
+                    'user': user.id,
+                    'product': product_detail.id,
+                    'variation': variant_option.id,
+                    'seller': seller.id,
+                    'iu_id': iu_id.id,
+                    'quantity': product['product_quantity'],
+                    'price': product_detail.selling_price*product['product_quantity'],
+                    'delivered_location': data['delivery_location'],
+                    "created_by":user.id
+                }
+                order_item_serializer = OrderItemsSerializer(data=order_item_data)
+                if order_item_serializer.is_valid():
+                    order_item_serializer.save()
+                    total_price +=Decimal(order_item_serializer.data['price'])
+                else:
+                    return Response({"status": "error","message":order_item_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+               
+                proc_dis_amt = Decimal(product.get('discount_amount') or 0)
+                proc_dis_per = Decimal(product.get('discount_percentage') or 0)
+
+                if proc_dis_amt > 0 and product_detail.selling_price:
+                    product_discount_percentage = (proc_dis_amt / Decimal(product_detail.selling_price)) * 100
+
+                elif proc_dis_per > 0 and product_detail.selling_price:
+                    product_discount_amount = (proc_dis_per / 100) * Decimal(product_detail.selling_price)
+                    product_total_price = Decimal(product_detail.selling_price) - product_discount_amount
+              
+
+                try:
+                    invoice_item_data={
+                        'product': product_detail.id,
+                        'invoice':invoice_model.id,
+                        'quantity': product['product_quantity'],
+                        'unit_price': product_detail.selling_price,
+                        'iu_id': iu_id.id,
+                        'tax_rate':product_detail.tax_rate,
+                        'tax_amount':product_detail.tax_amount*product['product_quantity'] if product_detail.tax_amount else 0 ,
+                        'discount_percentage':product_discount_percentage if  proc_dis_amt else proc_dis_per,
+                        'discount_amount':product_discount_amount*product['product_quantity'] if  proc_dis_per else proc_dis_amt*product['product_quantity'],
+                        "total":product_detail.selling_price*product['product_quantity'],
+                        "created_by":user.id
+                        }
+                except Exception as e:
+                    return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST) 
+                   
+                invoice_item_serializer = InvoiceItemsSerializer(data=invoice_item_data)
+                if invoice_item_serializer.is_valid():
+                    invoice_item_serializer.save()
+                    tax_amount += Decimal(invoice_item_serializer.data['tax_amount']  or 0)
+                    discount_amount +=Decimal(invoice_item_serializer.data['discount_amount']  or 0)
+                    total=Decimal(invoice_item_serializer.data['total'])+Decimal(invoice_item_serializer.data['tax_amount']or 0)-Decimal(invoice_item_serializer.data['discount_amount'] or 0)
+                    overall_total+=Decimal(total)
+                else:
+                    return Response({"status": "error","message":invoice_item_serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+            
+            total_discount_amount = data.get('total_discount_amount') or 0
+            total_discount_percentage =data.get('total_discount_percentage') or 0
+            overall_total_amount=0   
+            if total_discount_percentage>0:
+                total_discount_amount=overall_total*total_discount_percentage/ 100
+                overall_total_amount=(overall_total-total_discount_amount)
+        
+            elif total_discount_amount>0:
+                total_discount_percentage = (total_discount_amount /overall_total ) *100
+                overall_total_amount = overall_total- total_discount_amount
+            
+            invoice_model.tax_amount=tax_amount
+            invoice_model.total_discount_percentage=total_discount_percentage if total_discount_percentage>0 else None
+            invoice_model.total_discount_amount=total_discount_amount if  total_discount_amount>0 else discount_amount
+            invoice_model.total_amount=total_price
+            invoice_model.overall_total=overall_total_amount if overall_total_amount>0 else overall_total
+            order_details.total_price = overall_total_amount if overall_total_amount>0 else overall_total
+            order_details.save()
+            invoice_model.save()
+            
+            transaction.commit()
+    
+            return Response({"status": "success","message":"data created successfully",'data':invoice_model.id},status=status.HTTP_201_CREATED)    
+        except ProductVariation.DoesNotExist or VariantOption.DoesNotExist or SellerProfile.DoesNotExist:
+            return Response({"status": "error", "message": "Invalid data - product, variant, or seller not found"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            transaction.rollback()
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST) 
+          
+    def put(self, request):
+        user = request.user
+        order_item_id = request.data.get("order_id")
+        data=request.data
+        
+        if user.role_name != 'buyer':
+            return Response({"status": "failed", "message": "unauthorized access"}, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            order = OrderItems.objects.get(pk=order_item_id, order_status="pending", is_active=True)
+            print(order.price)
+        
+            serializer = OrderItemsSerializer(order, data=data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"status": "success", "message": "data updated successfully"}, status=status.HTTP_200_OK)
+
+        except OrderItems.DoesNotExist:
+            return Response({"status": "error", "message": "data not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)    
+       
+class PaymentDetailsAPIView(APIView):
+    
+    def post(self, request):
+        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+        
+        try:
+            transaction.set_autocommit(False)
+            data = request.data
+            data['created_by'] = request.user.id
+            data['iu_id'] = iu_id.id
+            try:
+                order_details = OrderDetails.objects.get(id=data['order_details_id'],iu_id=iu_id,is_active=True)
+                data['order']=order_details.id
+            except OrderDetails.DoesNotExist:
+                return Response({"status":"error","message":"data not found"},status=status.HTTP_404_NOT_FOUND)
+            try:  
+                payment_type = PaymentTypeMaster.objects.get(id=data['payment_type_id'],iu_id=iu_id,is_active=True)
+                data['payment_type']=payment_type.id
+                if payment_type.name==CASH_ON_DELIVERY:
+                    data['return_amount']=data['paid_ammount']-order_details.total_price
+                  
+                data['paid_amount']=order_details.total_price
+                
+            except PaymentTypeMaster.DoesNotExist:
+                return Response({"status": "error", "message": "PaymentTypeMaster not found"}, status=status.HTTP_404_NOT_FOUND)
+            try:
+                OrderItems.objects.filter(order=order_details, iu_id=iu_id, is_active=True).update(order_status=ORDER_CONFIRMED)
+                
+                InvoiceModel.objects.filter(order_detail=order_details, iu_id=iu_id, is_active=True).update(status=ORDER_CONFIRMED)
+                
+            except OrderItems.DoesNotExist or InvoiceModel.DoesNotExist:
+                return Response({"status": "error", "message": "data not found"}, status=status.HTTP_404_NOT_FOUND) 
+               
+            serializer = PaymentDetailsSerializer(data=data)
+            if serializer.is_valid():
+                serializer.save()
+                transaction.commit()
+                return Response({"status":"success","message":"paymenttype created successfully"},status=status.HTTP_201_CREATED)
+            
+            else:
+                return Response({"status":"error","message":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            return Response({"status": "error", "messages": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
+class ProductFetchAPI(APIView):
 
+    def get(self,request):
+        try:
+            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+            product_name = request.query_params.get("name")
+            product_type = request.query_params.get("type",None)
+            id = request.query_params.get("id")
+            min_price = request.query_params.get("min_price")
+            max_price = request.query_params.get("max_price")
+            
+            products = None 
+            if product_type is not None:
+                if product_type == VARIANT and id:
+                    variant = VariantOption.objects.filter(pk=id,iu_id=iu_id, is_active=True)
+                    if variant:
+                        products = ProductVariation.objects.filter(variation_id=id,iu_id=iu_id, is_active=True)
+
+                elif product_type == PRODUCT and id:
+                    products = ProductVariation.objects.filter(pk=id,iu_id=iu_id, is_active=True)
+
+            elif product_name:
+                print(product_name)
+                products = ProductMaster.objects.filter(name__istartswith=product_name,iu_id=iu_id, is_active=True)
+            if products is not None:
+                if min_price:
+                    products = products.filter(selling_price__gte=min_price)
+                if max_price:
+                    products = products.filter(selling_price__lte=max_price)
+
+            if not products:
+                return Response({"status": "success","message": "No products found","data": []})
+
+            if product_type in [VARIANT, PRODUCT]:
+                serializer = ProductVariationSerializer(products, many=True)
+            else:
+                serializer = ProductMasterSerializer(products, many=True)
+
+            return Response({"status": "success","message": "Data successfully retrieved","data": serializer.data})
+
+        except Exception as e:
+            return Response({"status": "failed","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class WishListAPI(APIView):
+    serializer_class=WishlistItemSerializers
+    def get_object(self,wishlist_id,user,iu_id):
+        try:
+            wishlist=WishlistItem.objects.get(id=wishlist_id,User=user,is_active=True,is_removed=False,iu_id=iu_id)
+            return wishlist
+        except WishlistItem.DoesNotExist:
+            return None
+
+    def get(self,request):
+        user=request.user
+        role_name = get_user_roles(request)
+        if not role_name in ['consumer']:
+            return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+        wishlist=WishlistItem.objects.filter(User=user,is_active=True,is_removed=False,iu_id=iu_id)
+        wishlist_count=wishlist.count()
+        serializer_wishlist=self.serializer_class(wishlist,many=True,fields=['id','Product','product_variant'])
+        return Response({"status":"success","message":"User wishlist","data":serializer_wishlist.data,"wishlist_count":wishlist_count},status=status.HTTP_200_OK)
+    
+    def post(self,request):
+        user=request.user
+        role_name = get_user_roles(request)
+        # if not role_name in ['consumer']:
+        #     return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+        data=request.data
+        if not data:
+            return Response({"status":"error","message":"no data found"},status=status.HTTP_400_BAD_REQUEST)
+        
+        # current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+        
+        data['User']=user.id
+        data['iu_id']=iu_id.id
+        data['created_by']=user.id
+        print(data)
+        wishlist=self.serializer_class(data=data)
+        if not wishlist.is_valid():
+            return Response({"status":"error","message":wishlist.errors},status=status.HTTP_400_BAD_REQUEST)
+        wishlist.save()
+        return Response({"status":"Success","message":"Product Successfully Added to Wishlist"},status=status.HTTP_200_OK)
+    
+    def delete(self,request):
+        user=request.user
+        role_name = get_user_roles(request)
+        if not role_name in ['consumer']:
+            return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+        wishlist_id=request.data.get('wishlist_id')
+        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+        wishlist=self.get_object(wishlist_id,user.id,iu_id)
+        if wishlist is None:
+            return Response({"status":"error","message":"no wishlist is found"},status=status.HTTP_404_NOT_FOUND)
+        wishlist.is_active=False
+        wishlist.is_removed=True
+        wishlist.modified_by=user.id
+        wishlist.save()
+        return Response({"status":"success","message":"product removed from wishlist"},status=status.HTTP_200_OK)
+    
+class CartItemAPI(APIView):
+    serializer_class=CartItemSerializer
+    def get_object(self,cart_id,user,iu_id):
+        try:
+            cartitem=CartItem.objects.get(id=cart_id,User=user,is_active=True,iu_id=iu_id,is_removed=False)
+            return cartitem
+        except CartItem.DoesNotExist:
+            return None
+        
+    def get(self,request):
+        user=request.user
+        role_name = get_user_roles(request)
+        if not role_name in ['consumer']:
+            return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+        carts=CartItem.objects.filter(User=user,is_active=True,is_removed=False,iu_id=iu_id)
+        carts_count=carts.count()
+        cart_serialize=self.serializer_class(carts,many=True,fields=['id','quantity'])
+        return Response({"status":"success","message":"User Carts","data":cart_serialize.data,"carts_count":carts_count},status=status.HTTP_200_OK)
+    
+    def post(self,request):
+        user=request.user
+        role_name = get_user_roles(request)
+        if not role_name in ['consumer']:
+            return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+        data=request.data
+        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
+
+        data['iu_id']=iu_id.id
+        data['created_by']=user.id
+        data['User']=user.id
+        carts=self.serializer_class(data=data)
+        if not carts.is_valid():
+            return Response({"status":"error","message":carts.errors},status=status.HTTP_400_BAD_REQUEST)
+        carts.save()
+        return Response({"status":"success","message":"item added to cart successfully"},status=status.HTTP_200_OK)
+    
+    def put(self,request):
+        try:
+            user=request.user
+            role_name = get_user_roles(request)
+            if not role_name in ['consumer']:
+                return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+            user_id=request.user.id
+            cart_id=request.data.get('cart_id')
+            if not cart_id:
+                return Response({"status":"error","message":"cart_id required"},status=status.HTTP_400_BAD_REQUEST)
+            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+            user_cart=self.get_object(cart_id,user,iu_id)
+            if not user_cart:
+                return Response({"status":"error","message":"cart does not exist"},status=status.HTTP_404_NOT_FOUND)
+            data=request.data
+            print(data)
+            data['modified_by']=user_id
+            carts=self.serializer_class(user_cart,data=data,partial=True)
+            if not carts.is_valid():
+                return Response({"status":"error","message":carts.errors},status=status.HTTP_400_BAD_REQUEST)
+            carts.save()
+            return Response({"status":"success","mesaage":"cart updated"},status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response(str(e))
+    def delete(self,request):
+        try:
+            user=request.user
+            if not user:
+                return Response({"status":"error","message":"Token not found"},status=status.HTTP_400_BAD_REQUEST)
+            role_name = get_user_roles(request)
+            if not role_name in ['consumer']:
+                return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+            cart_id=request.data.get('cart_id')
+            if not cart_id:
+                return Response({"status":"error","message":"cart_id required"},status=status.HTTP_400_BAD_REQUEST)
+            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+            user_cart=self.get_object(cart_id,user.id,iu_id)
+            user_cart.is_removed=True
+            user_cart.is_active=False
+            user_cart.save()
+            return Response({"status":"success","message":"cart removed successfully"},status=status.HTTP_200_OK)
+        except CartItem.DoesNotExist:
+                return Response({"status":"error","message":"cart does not exist"},status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status":"error","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
+        
+class FeedbackAPI(APIView):
+    serializerclass=FeedbackSerializer
+    def get(self,request):
+        if not request.user:
+            return Response({"status":"error","message":"Token not found"},status=status.HTTP_400_BAD_REQUEST)
+        try:
+            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+            try:
+                product_id=request.query_params.get('product_id')
+                feedback=FeedbackDetails.objects.filter(is_active=True,iu_id=iu_id,product=product_id)
+                feedbackserializer=self.serializerclass(feedback,many=True,fields=['id','product','comments','ratings','images','like_count','dislike_count'])
+                return Response({"status":"Success","message":"feedback details","data":feedbackserializer.data},status=status.HTTP_200_OK)
+            
+            except FeedbackDetails.DoesNotExist:
+                    return Response({"status":"error","message":"feedback id not found"},status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"status": "error","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        
+    def post(self,request):
+        role_name = get_user_roles(request)
+        if not role_name in ['consumer']:
+            return Response({"status":"error","message":"unauthorized access"},status=status.HTTP_401_UNAUTHORIZED)
+        if not request.user:
+            return Response({"status":"error","message":"Token not found"},status=status.HTTP_400_BAD_REQUEST)
+        user=request.user
+        data=request.data
+        try:
+            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+            try:
+                data['user']=user.id
+                data['iu_id']=iu_id.id
+                data['created_by']=user.id
+                order_items=OrderItems.objects.get(iu_id=iu_id,product=data['product'],order_status=ORDER_CONFIRMED,user=user)
+                feedback=self.serializerclass(data=data)
+                if not feedback.is_valid():
+                    return Response({"status":"error","message":feedback.errors},status=status.HTTP_400_BAD_REQUEST)
+                feedback.save()
+                return Response({"status":"success","message":"feedback posted"},status=status.HTTP_200_OK)
+            except OrderItems.DoesNotExist:
+                    return Response({"status":"error","message":" Haven't purchased this product"},status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status":"error","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
+    

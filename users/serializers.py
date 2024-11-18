@@ -17,16 +17,44 @@ class CustomUserSerializer(serializers.ModelSerializer):
             data['password'] = make_password(data['password'])  
 
         return data
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super(CustomUserSerializer, self).__init__(*args, **kwargs)
+ 
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
     
 
 
 
 class UserPersonalProfileSerializer(serializers.ModelSerializer):
-    user = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
+    # user = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
 
     class Meta:
         model = UserPersonalProfile
         fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super(UserPersonalProfileSerializer, self).__init__(*args, **kwargs)
+ 
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+    
+        
+    def to_representation(self,instance):
+        data=super().to_representation(instance)
+        
+        customuser_details= CustomUserSerializer(instance.user).data
+        data['custom_user_details']={field:customuser_details[field] for field in ['mobile_number', 'email']}
+    
+        return data
 
 
 

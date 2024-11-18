@@ -11,5 +11,5 @@ urlpatterns = [
     path('role-create/',RoleMasterCreateView.as_view()),
     path('role_login/',RefreshTokenView.as_view(),name='role_login'),
     path('change_password/',ChangePassword.as_view(),name='change-password'),
-
+#   path('forget/',ForgetPasswordAPI.as_view(),name='forget'),
 ]

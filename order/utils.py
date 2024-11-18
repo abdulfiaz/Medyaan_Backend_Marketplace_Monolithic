@@ -6,6 +6,10 @@ from rest_framework.response import Response
 from rest_framework.views import status
 import jwt
 
+CASH_ON_DELIVERY="cash on delivery"
+VARIANT="variant"
+PRODUCT="product"
+ORDER_CONFIRMED="order_confirmed"
 
 def upload_image_s3(image_file, file_name):
     try:
