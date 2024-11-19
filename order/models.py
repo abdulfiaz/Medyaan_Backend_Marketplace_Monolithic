@@ -8,7 +8,7 @@ class ProductCategoryMaster(BaseModel):
     """To store the type of catgory """
     name=models.CharField(max_length=150,null=True,blank=True)
     description=models.CharField(max_length=300,null=True,blank=True) 
-    sub_categories = models.ManyToManyField('self', blank=True,related_name='product_subcategory')#sub category as many to many
+    sub_categories = models.ManyToManyField('self', blank=True,related_name='product_subcategory',symmetrical=False)#sub category as many to many
     can_be_deleted=models.BooleanField(default=False)
     image=ArrayField(models.TextField(),blank=True,null=True)
     iu_id = models.ForeignKey(IUMaster, on_delete=models.CASCADE, related_name='product_category_master_iu')
