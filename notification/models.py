@@ -17,6 +17,8 @@ class TemplateMaster(BaseModel):
 class EventMaster(BaseModel):
     name = models.CharField(max_length=100, null=True, blank=True)
     email = models.BooleanField(default=False)
+    sms=models.BooleanField(default=False)
+    web=models.BooleanField(default=False)
     role = models.CharField(max_length=50, null=True, blank=True)
     sms_templateid = models.CharField(max_length=50,blank=True,null=True)
     iu_id = models.ForeignKey(IUMaster, related_name='Eventmaster_iu_id', on_delete=models.DO_NOTHING)
@@ -27,12 +29,15 @@ class EventMaster(BaseModel):
 
 class Notification(BaseModel):
     event = models.ForeignKey(EventMaster,related_name='event_id', on_delete=models.DO_NOTHING)
-    sender = models.CharField(max_length=200, blank=True, null=True)
-    receiver = models.CharField(max_length=200, blank=True, null=True)
-    subject = models.CharField(max_length=100,blank=True, null=True)
+    sender = models.ForeignKey(CustomUser,related_name='sender', on_delete=models.DO_NOTHING,null=True,blank=True)
+    receiver =models.ForeignKey(CustomUser,related_name='receiver', on_delete=models.DO_NOTHING,null=True,blank=True)
+    subject = models.TextField(blank=True, null=True)
     message=models.TextField(blank=True,null=True)
     email_id = models.CharField(max_length=100,null=True,blank=True)
     notification_message = models.TextField(blank=True, null=True)
+    web_message = models.TextField(blank=True, null=True)
+    sms_message = models.TextField(blank=True, null=True)
+    mobile_number=models.CharField(max_length=30,blank=True,null=True)
     redirect_link = models.CharField(max_length=100,blank=True, null=True) 
     role = models.CharField(max_length=100, null=True, blank=True)
     iu_id = models.ForeignKey(IUMaster, related_name='Notification_iu_id', on_delete=models.DO_NOTHING)
