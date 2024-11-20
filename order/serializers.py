@@ -5,9 +5,11 @@ import random
 import string
 
 class SubCategorySerializer(serializers.ModelSerializer):
+    
     class Meta:
         model = ProductCategoryMaster
         fields = ['id', 'name', 'description','iu_id','created_by','modified_by']
+
 
     def update(self, obj, validated_data):
         
@@ -17,14 +19,35 @@ class SubCategorySerializer(serializers.ModelSerializer):
         obj.save()
         return obj
  
- 
+
 class Categoryserializer(serializers.ModelSerializer):
-    sub_categories = SubCategorySerializer(many=True, read_only=True)
- 
+    is_parent_category = serializers.SerializerMethodField()
+    parent_category_id = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductCategoryMaster
-        fields = ['id', 'name', 'description', 'sub_categories','created_by','iu_id','modified_by']
+        fields = ['id', 'name', 'description', 'is_parent_category','parent_category_id','created_by','iu_id','modified_by']
 
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super().__init__(*args, **kwargs)
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+
+    def get_is_parent_category(self, obj): #fetch the category only
+        return obj.is_parent_category()
+    
+    def is_sub_category(self): #fetch the subcategory only
+        return ProductCategoryMaster.objects.filter(sub_categories=self).exists()
+    
+    def get_parent_category_id(self, obj):# Fetch the IDs of parent categories
+        parent_categories = ProductCategoryMaster.objects.filter(sub_categories=obj)
+        return [parent.id for parent in parent_categories] if parent_categories.exists() else None
+
+    
 class VariantMasterSerializer(serializers.ModelSerializer):
     class Meta:
         model=VariantMaster

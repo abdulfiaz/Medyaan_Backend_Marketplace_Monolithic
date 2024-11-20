@@ -40,68 +40,45 @@ from order.utils import *
 
 class CategoryMasterAPI(APIView):
     serializer_class = Categoryserializer
-
-    def get_category_hierarchy(self,category, visited_ids=None,fields=None):
-        if visited_ids is None:
-            visited_ids = set()
-
-        if category.id in visited_ids:
-            return None
-
-        visited_ids.add(category.id)
-        
-        hierarchy = Categoryserializer(category).data
-        if fields:
-            hierarchy = {field: hierarchy[field] for field in fields if field in hierarchy}
-
-        hierarchy['sub_categories'] = []
-
-        for sub_category in category.sub_categories.filter(is_active=True).exclude(id__in=visited_ids):
-            sub_hierarchy = self.get_category_hierarchy(sub_category, visited_ids,fields=fields)
-            if sub_hierarchy:
-                hierarchy['sub_categories'].append(sub_hierarchy)
-
-        return hierarchy
-
-   
-    def get(self, request):
+    def get(self,request):
         try:
             role = get_user_roles(request)
             if role != 'manager':
-                return Response({"status":"error","message":"Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
-            
+                return Response({"status": "error", "message": "Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+
             current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
             iu_id = get_iuobj(current_site)
+
             data = request.data
             data['iu_id'] = iu_id.id
 
-            id = request.query_params.get('id')
-            fields = ['id', 'name', 'description']  
+            category_type = request.query_params.get('type')  
 
-            categories_data = []
+            categories = ProductCategoryMaster.objects.all()
+            fields=['id','name','description','is_parent_category','parent_category_id']
             
-            if id:
-                category = get_object_or_404(ProductCategoryMaster,pk=id,is_active=True,iu_id=iu_id)
-                category_hierarchy = self.get_category_hierarchy(category, fields=fields)
-                categories_data.append(category_hierarchy)
-            else:
-                categories = ProductCategoryMaster.objects.filter(is_active=True,iu_id=iu_id)
-                visited_ids = set()
-                for category in categories:
-                        category_hierarchy = self.get_category_hierarchy(category, visited_ids, fields=fields)
-                        if category_hierarchy:
-                           categories_data.append(category_hierarchy)
+            if category_type == 'category':
+                parent_categories = [category for category in categories if category.is_parent_category()]
+                serializer = self.serializer_class(parent_categories, many=True,fields=fields)
+                return Response({'status': 'success','message':'Category fetched successfully','data': serializer.data},status=status.HTTP_200_OK)
+        
+            elif category_type == 'subcategory':
+                
+                subcategories = [category for category in categories if category.is_sub_category()]
+                serializer = self.serializer_class(subcategories, many=True,fields=fields)
+                return Response({'status': 'success','message':'Subcategory fetched successfully','data': serializer.data},status=status.HTTP_200_OK)
 
-                                     
-            return Response({"status": "success", "message":"Data fetched successfully","data":categories_data}, status=status.HTTP_200_OK)
+            else:
+                serializer = self.serializer_class(categories, many=True,fields=fields)
+                return Response({'status': 'success','message':'All category and subcategory fetched successfully','data': serializer.data},status=status.HTTP_200_OK)
+        
         except Exception as e:
             return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def post(self,request):
-           
+                
+    def post(self, request):
         role = get_user_roles(request)
         if role != 'manager':
-            return Response({"status":"error","message":"Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
+            return Response({"status": "error", "message": "Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
 
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
@@ -109,55 +86,37 @@ class CategoryMasterAPI(APIView):
         data = request.data
         data['created_by'] = request.user.id
         data['iu_id'] = iu_id.id
+        parent_category_id = data.pop('parent_category', None)
 
-        image = request.FILES.getlist('image', None)
-        image_urls = []
-        if  not image:
-            return Response({"status":"error","message":'image not found'}, status=status.HTTP_400_BAD_REQUEST)
-        for image_file in image:
-            file_name = image_file.name
-            image_url = upload_image_s3(image_file, file_name)
-            if image_url:
-                image_urls.append(image_url)
-        data.setlist('image',image_urls)
-        
 
-        existing_category = ProductCategoryMaster.objects.filter(name__iexact=data.get('name'), is_active=True,iu_id=iu_id).exists()
+        existing_category = ProductCategoryMaster.objects.filter(name__iexact=data.get('name'),id=parent_category_id,is_active=True,iu_id=iu_id).exists()
         if existing_category:
-            return Response({"status":"error","message":'Category with this name already exists'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"status": "error", "message": "Category with this name already exists"},status=status.HTTP_400_BAD_REQUEST)
 
-       
-        transaction.set_autocommit(False)  
+        transaction.set_autocommit(False)
         try:
-            
-            main_category_serializer = self.serializer_class(data=data)
-            if not main_category_serializer.is_valid():
-                return Response({"status": "error", "message": main_category_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+            category_serializer = self.serializer_class(data=data)
+            if not category_serializer.is_valid():
+                return Response({"status": "error", "message": category_serializer.errors},status=status.HTTP_400_BAD_REQUEST)
 
-            main_category = main_category_serializer.save()
+            category = category_serializer.save()
 
-            subcategories_data = data.get('sub_categories', [])
-            for subcategory_data in subcategories_data:
-                subcategory_data['created_by'] = request.user.id
-                subcategory_data['iu_id'] = iu_id.id
 
-                existing_subcategory = ProductCategoryMaster.objects.filter(name__iexact=subcategory_data.get('name'), is_active=True,iu_id=iu_id).exists()
+            if parent_category_id:
+                parent_category = ProductCategoryMaster.objects.filter(id=parent_category_id, is_active=True).first()
+                if not parent_category:
+                    transaction.rollback()
+                    return Response({"status": "error", "message": "Parent category does not exist"},status=status.HTTP_400_BAD_REQUEST)
 
-                if existing_subcategory:
-                    return Response({"status":"error","message":'SubCategory with this name already exists'}, status=status.HTTP_400_BAD_REQUEST)
-                subcategory_serializer = SubCategorySerializer(data=subcategory_data)
-                if not subcategory_serializer.is_valid():
-                    return Response({"status": "error", "message": subcategory_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+                parent_category.sub_categories.add(category)
 
-                subcategory = subcategory_serializer.save()
-                main_category.sub_categories.add(subcategory)
-                
-            transaction.commit()  
-            return Response({"status": "success", "message":"Category created successfully","data":{"id": main_category.id}}, status=status.HTTP_201_CREATED)
+            transaction.commit()
+            return Response({"status": "success", "message": "Category created successfully", "data": {"id": category.id}},status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            transaction.rollback()  
-            return Response({"status": "error", "message": "An unexpected error occurred" +str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            transaction.rollback()
+            return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)},status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request):
         role = get_user_roles(request)
@@ -176,7 +135,7 @@ class CategoryMasterAPI(APIView):
     
         category = get_object_or_404(ProductCategoryMaster, id=id,is_active=True,iu_id=iu_id)
 
-        if category.can_be_deleted:  
+        if not category.can_be_editable:  
             return Response({"status":"error","message":"This category cannot be modified"}, status=status.HTTP_403_FORBIDDEN)
         
         serializer = SubCategorySerializer(category, data=data,partial=True)
@@ -201,7 +160,7 @@ class CategoryMasterAPI(APIView):
         
         category = get_object_or_404(ProductCategoryMaster, id=id, is_active=True,iu_id=iu_id)
       
-        if  category.can_be_deleted:
+        if not category.can_be_deleted:
             return Response({"status":"error","message":"This category cannot be deleted"}, status=status.HTTP_403_FORBIDDEN)
         
         if category:
@@ -949,7 +908,45 @@ class BuyerView(APIView):
 
         except Exception as e:
             return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
 
+class OrderDetails(APIView):
+    def get(self, request):
+        try:
+            role = get_user_roles(request)
+            if role != 'consumer':
+                return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            seller = request.user.id
+            
+            order_status = request.query_params.get('order_status')  
+           
+           
+            allowed_statuses = ['pending', 'delivered', 'shipping', 'order_confirmed']
+            
+            if order_status not in allowed_statuses:
+                return Response({"status": "error", "message": "Invalid order status"}, status=status.HTTP_400_BAD_REQUEST)
+            
+           
+            orderdetails = OrderItems.objects.filter(user_id=seller, order_status=order_status, is_active=True)
+            
+           
+            data = []
+            for order in orderdetails:
+                data.append({
+                    'consumer_id': order.user_id,
+                    'product_id': order.product_id,
+                    'variation_id': getattr(order, 'variation_id', None), 
+                    'quantity': order.quantity,
+                    'price': order.price,
+                    'delivered_location': order.delivered_location if order.order_status == 'delivered' else None,
+                    'delivered_time': order.delivered_time if order.order_status == 'delivered' else None
+                })
+            
+            return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ProductMasterView(APIView):
     serializer_class=ProductMasterSerializer
