@@ -9,7 +9,8 @@ class ProductCategoryMaster(BaseModel):
     name=models.CharField(max_length=150,null=True,blank=True)
     description=models.CharField(max_length=300,null=True,blank=True) 
     sub_categories = models.ManyToManyField('self', blank=True,related_name='product_subcategory',symmetrical=False)#sub category as many to many
-    can_be_deleted=models.BooleanField(default=False)
+    can_be_deleted=models.BooleanField(default=True)
+    can_be_editable=models.BooleanField(default=True)
     image=ArrayField(models.TextField(),blank=True,null=True)
     iu_id = models.ForeignKey(IUMaster, on_delete=models.CASCADE, related_name='product_category_master_iu')
 
@@ -17,6 +18,12 @@ class ProductCategoryMaster(BaseModel):
     class Meta:
         db_table='product_category_master'
         ordering = ['created_at']
+
+    def is_parent_category(self): 
+        return self.sub_categories.exists()
+    
+    def is_sub_category(self):
+        return ProductCategoryMaster.objects.filter(sub_categories=self).exists()
                     
                     
 
