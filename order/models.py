@@ -127,14 +127,39 @@ class PaymentTypeMaster(BaseModel):
         db_table = 'payment_type'
         ordering = ['created_at']
         
+class OrderTypeMaster(BaseModel):
+    name=models.CharField(max_length=50,blank=True,null=True)
+    description=models.CharField(max_length=50,blank=True,null=True)
+    iu_id=models.ForeignKey(IUMaster,related_name='ordertypemaster_iuid',blank=True,null=True,on_delete=models.CASCADE)
+    
+    class Meta:
+        db_table = 'order_type'
+        ordering = ['created_at']
+        
 class PaymentDetails(BaseModel):
     #fetch specific user order from the OrderDetails and store it 
-    order=models.ForeignKey(OrderDetails, related_name='PaymentDetails_order',on_delete=models.CASCADE)
-    payment_type=models.ForeignKey(PaymentTypeMaster, related_name='PaymentDetails_payment_type',on_delete=models.CASCADE)
+    order=models.CharField(max_length=50,null=True,blank=True)
+    ordertype =models.ForeignKey(OrderTypeMaster, related_name='payment_details_order_type',blank=True,null=True,on_delete=models.CASCADE)
     paid_amount=models.DecimalField(max_digits=10,null=True,blank=True,default=0,decimal_places=3)
     payment_status=models.CharField(max_length=50,default="pending")
     return_amount=models.DecimalField(max_digits=10,null=True,blank=True,default=0,decimal_places=3)
+    due = models.DecimalField(max_digits=10,null=True,blank=True,default=0,decimal_places=3)
+    total_amount =models.DecimalField(max_digits=10,null=True,blank=True,default=0,decimal_places=3) 
+    # 1, 1, 1, 1 appointment, surrender, adoption, shop
     
+    class Meta:
+        db_table = 'payment_details'
+        ordering = ['created_at']
+    
+class PaymentReference(BaseModel):
+    payment_detail=models.ForeignKey(PaymentDetails, related_name='payment_refernce_payment_detail',blank=True,null=True,on_delete=models.CASCADE)
+    payment_type=models.ForeignKey(PaymentTypeMaster, related_name='payment_reference_payment_type',blank=True,null=True,on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=3,blank=True, null=True)
+    remarks = models.CharField(max_length=100, blank=True, null=True)
+
+    class Meta:
+        db_table = 'payment_refernce'
+        ordering = ['created_at']
     
 class WishlistItem(BaseModel):
     User=models.ForeignKey(CustomUser,on_delete=models.CASCADE,related_name = 'wishlist_user')
@@ -171,8 +196,8 @@ class FeedbackDetails(BaseModel):
     comments=models.TextField(blank=True,null=True)
     ratings=models.IntegerField(default=1)
     images=ArrayField(models.TextField(null=True,blank=True,default=dict))
-    like_count=models.IntegerField(default=0)
-    dislike_count=models.IntegerField(default=0)
+    likes=ArrayField(models.IntegerField(),default=list)
+    dislikes=ArrayField(models.IntegerField(),default=list)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)    
 
     class Meta:
