@@ -78,6 +78,7 @@ class ProductVariation(BaseModel):
     total_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)#price of the product
     selling_price=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)#selling price of the product
     stock=models.IntegerField(blank=True,null=True)#quantity of the product 
+    consumable_quantity=models.IntegerField(blank=True,null=True)
     tax_rate=models.DecimalField(max_digits=5,blank=True,null=True,decimal_places=3)
     tax_amount=models.DecimalField(max_digits=10,blank=True,null=True,decimal_places=3)
     image=ArrayField(models.TextField(),blank=True,null=True)#image for each product
@@ -92,11 +93,10 @@ class ProductVariation(BaseModel):
 class OrderDetails(BaseModel):
     #store the user where user is in CustomUser
     user = models.ForeignKey(CustomUser, related_name='OrderDetails_user', on_delete=models.CASCADE)
-    #fetch whole product and its price stored in it
     total_price = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True, default=0) 
-    #store the iu id from the IUMaster
+    item_count=models.IntegerField(blank=True,null=True)
     iu_id=models.ForeignKey(IUMaster,related_name='OrderDetails_iuid',on_delete=models.CASCADE)
-   
+    
    
     class Meta:
         db_table = 'order_details'

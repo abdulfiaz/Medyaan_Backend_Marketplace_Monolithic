@@ -405,7 +405,7 @@ class ForgetPasswordAPI(APIView):
             user=CustomUser.objects.get(email=data['email'])    
             otp=str(random.randint(100000,999999))
             user.temp_code=otp
-            subject="Forgot poassword otp"
+            subject="Forgot password otp"
             body=f"email:{data['email']} and your otp is {otp}"
             
             send_mail(subject,body,EMAIL_HOST_USER,[data['email']])
