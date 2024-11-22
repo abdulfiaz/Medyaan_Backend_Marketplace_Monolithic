@@ -203,8 +203,8 @@ class FeedbackDetails(BaseModel):
     comments=models.TextField(blank=True,null=True)
     ratings=models.IntegerField(default=1)
     images=ArrayField(models.TextField(null=True,blank=True,default=dict))
-    likes=ArrayField(models.IntegerField(),default=list)
-    dislikes=ArrayField(models.IntegerField(),default=list)
+    likes=models.ManyToManyField(CustomUser,related_name='feedbackdetails_likes',blank=True)
+    dislikes=models.ManyToManyField(CustomUser,related_name='feedbackdetails_dislikes',blank=True)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)    
 
     class Meta:
