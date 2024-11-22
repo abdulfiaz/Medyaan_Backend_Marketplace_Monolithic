@@ -51,7 +51,7 @@ def login(request):
             import traceback
             traceback.print_exc()
             transaction.rollback()
-            return Response({'status': 'error', 'message': 'Something went wrong...' + str(e)},status=status.HTTP_400_BAD_REQUEST)
+            return Response({'status': 'error', 'message': ' Something went wrong...' + str(e)},status=status.HTTP_400_BAD_REQUEST)
  
 class RoleMasterCreateView(APIView):
     def post(self, request):
