@@ -1,4 +1,4 @@
-from decimal import Decimal
+
 from django.conf import settings
 from adminapp.iudetail import get_iuobj
 from users.auth import get_user_roles
@@ -12,30 +12,14 @@ from adminapp.utils import *
 from adminapp.models import *
 from rest_framework.views import APIView,status
 from rest_framework.response import Response
-from django.shortcuts import render
 from django.template.loader import render_to_string
-from rest_framework.decorators import api_view
 from order.utils import *
 from django.utils import timezone
 from sdd_marketplace import settings
-import boto3
-from botocore.config import Config
-from django.conf import settings
-from adminapp.iudetail import get_iuobj
-from users.auth import get_user_roles
-from django.shortcuts import get_object_or_404
-from django.db import transaction
-from order.serializers import *
-from users.models import *
-from order.models import *
-from notification.models import *
-from adminapp.utils import *
-from adminapp.models import *
-from rest_framework.views import APIView,status
-from rest_framework.response import Response
-from django.shortcuts import render
-from django.template.loader import render_to_string
-from order.utils import *
+
+
+
+
 
 
 
