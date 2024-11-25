@@ -202,7 +202,7 @@ class FeedbackDetails(BaseModel):
     product=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,related_name = 'feedbackdetails_product')
     comments=models.TextField(blank=True,null=True)
     ratings=models.IntegerField(default=1)
-    images=ArrayField(models.TextField(null=True,blank=True,default=dict))
+    images=ArrayField(models.TextField(),blank=True,null=True)#image for each product
     likes=models.ManyToManyField(CustomUser,related_name='feedbackdetails_likes',blank=True)
     dislikes=models.ManyToManyField(CustomUser,related_name='feedbackdetails_dislikes',blank=True)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)    
