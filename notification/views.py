@@ -11,10 +11,11 @@ from rest_framework import status
 
 class TemplateMasterView(APIView):
     serializer_class=TemplateMasterSerializer
-    def get(self, request, id=None):
+    def get(self, request):
         roles = get_user_roles(request)
         if roles !="admin":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        id = request.query_params.get('id')
         if id:
             template = TemplateMaster.objects.get(id=id,is_active=True)
             serializer = self.serializer_class(template)
@@ -30,6 +31,11 @@ class TemplateMasterView(APIView):
         if roles !="admin":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
         data=request.data
+        try:
+            template=TemplateMaster.objects.get(template_name__iexact=data.get('template_name'),is_active=True)
+            return Response({"status":"error","messaage":"template name is already exists"},status=status.HTTP_400_BAD_REQUEST)
+        except TemplateMaster.DoesNotExist:
+            pass
         serializer = self.serializer_class(data=data)
         if serializer.is_valid():
             serializer_data=serializer.save(created_by=request.user.id)
@@ -37,6 +43,7 @@ class TemplateMasterView(APIView):
         return Response({'status': 'error', 'message': 'template not create',"data":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         
     def put(self, request, id):
+        id=request.data.get('id')
         roles = get_user_roles(request)
         if roles !="admin":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
@@ -52,7 +59,8 @@ class TemplateMasterView(APIView):
 
         return Response({'status': 'error', 'message': 'template not found',"data":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
-    def delete(self, request, id):
+    def delete(self, request):
+        id=request.data.get('id')
         roles = get_user_roles(request)
         if roles !="admin":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
@@ -67,7 +75,11 @@ class TemplateMasterView(APIView):
 
 class EventMasterView(APIView):
     serializer_class=EventMasterSerializer
-    def get(self, request, id=None):
+    def get(self, request):
+        roles = get_user_roles(request)
+        if roles !="admin":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        id = request.query_params.get('id')
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
 
@@ -83,6 +95,9 @@ class EventMasterView(APIView):
 
     
     def post(self, request):
+        roles = get_user_roles(request)
+        if roles !="admin":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
         data=request.data
         role=data.get('role') 
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
@@ -91,6 +106,11 @@ class EventMasterView(APIView):
         if not iu_id:
             return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
         data['iu_id'] = iu_id.id
+        try:
+            event=EventMaster.objects.get(name__iexact=data.get('name'),is_active=True,iu_id=iu_id)
+            return Response({"status":"error","messaage":"event name is already exists"},status=status.HTTP_400_BAD_REQUEST)
+        except EventMaster.DoesNotExist:
+            pass
         serializer = self.serializer_class(data=data)
         if serializer.is_valid():
             serializer_data=serializer.save(role=role,created_by=request.user.id)
@@ -98,7 +118,11 @@ class EventMasterView(APIView):
             return Response({'status': 'success', 'message': 'event created successfully.','data':serializer_data.id}, status=status.HTTP_201_CREATED)
         return Response({'status': 'error', 'message': 'event not created',"data":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
-    def put(self, request, id):
+    def put(self, request):
+        roles = get_user_roles(request)
+        if roles !="admin":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        id=request.data.get('id')
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
 
@@ -116,8 +140,11 @@ class EventMasterView(APIView):
 
         return Response({'status': 'error', 'message': 'data is not update',"data":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
     
-    def delete(self, request, id):
-        user=request.user
+    def delete(self, request):
+        roles = get_user_roles(request)
+        if roles !="admin":
+            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        id=request.data.get('id')
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
 
@@ -133,7 +160,8 @@ class EventMasterView(APIView):
             
 class NotificationView(APIView):
     serializer_class=NotificationSerializer
-    def get(self, request, id=None):
+    def get(self, request):
+        id = request.query_params.get('id')
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
 
@@ -147,60 +175,61 @@ class NotificationView(APIView):
             serializer = self.serializer_class(message, many=True)
         return Response({'status': 'success', 'message': 'successfully receive data.','data':serializer.data},status=status.HTTP_200_OK)
     
-    # def post(self, request):
-    #     data = request.data
-    #     current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-    #     iu_id = get_iuobj(current_site)
+    def post(self, request):
+        data = request.data
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
 
-    #     if not iu_id:
-    #         return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    #     data['iu_id'] = iu_id.id
+        data['iu_id'] = iu_id.id
 
-    #     receiver_id = data.get('receiver')
-    #     event_id = data.get('event')
+        receiver_id = data.get('receiver')
+        event_id = data.get('event')
 
-    #     if receiver_id:
-    #         receiver_email = get_email(receiver_id)
-    #         if receiver_email:
-    #             data['email_id'] = receiver_email
-    #         else:
-    #             return Response({'status': 'error', 'message': 'Receiver email not found.'}, status=status.HTTP_404_NOT_FOUND)
-    #     else:
-    #         return Response({'status': 'error', 'message': 'Receiver ID not provided.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        
-    #     if event_id:
-    #         try:
-    #             event = EventMaster.objects.get(id=event_id)
-    #             data['role'] = event.role  
-    #         except EventMaster.DoesNotExist:
-    #             return Response({'status': 'error', 'message': 'Event not found.'}, status=status.HTTP_404_NOT_FOUND)
-    #     else:
-    #         return Response({'status': 'error', 'message': 'Event ID not provided.'}, status=status.HTTP_400_BAD_REQUEST)
+        if receiver_id:
+            receiver_email = get_email(receiver_id)
+            if receiver_email:
+                data['email_id'] = receiver_email
+            else:
+                return Response({'status': 'error', 'message': 'Receiver email not found.'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'status': 'error', 'message': 'Receiver ID not provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
         
-    #     if event_id:
-    #         try:
-    #             event = EventMaster.objects.get(id=event_id)
-    #             template = TemplateMaster.objects.get(id=event.sms_templateid)
+        if event_id:
+            try:
+                event = EventMaster.objects.get(id=event_id)
+                data['role'] = event.role  
+            except EventMaster.DoesNotExist:
+                return Response({'status': 'error', 'message': 'Event not found.'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'status': 'error', 'message': 'Event ID not provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    #             formatted_message = template.content.format(data.get('notification_message', ''))
+        
+        if event_id:
+            try:
+                event = EventMaster.objects.get(id=event_id)
+                template = TemplateMaster.objects.get(id=event.sms_templateid)
 
-    #             data['notification_message'] = formatted_message
+                formatted_message = template.content.format(data.get('notification_message', ''))
 
-    #         except (EventMaster.DoesNotExist, TemplateMaster.DoesNotExist):
-    #             return Response({'status': 'error', 'message': 'Event or Template not found.'}, status=status.HTTP_404_NOT_FOUND)
+                data['notification_message'] = formatted_message
 
-    #     serializer = self.serializer_class(data=data)
+            except (EventMaster.DoesNotExist, TemplateMaster.DoesNotExist):
+                return Response({'status': 'error', 'message': 'Event or Template not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    #     if serializer.is_valid():
-    #         serializer_data = serializer.save(created_by=request.user.id)
-    #         return Response({'status': 'success', 'message': 'Notification created successfully.', 'data': serializer_data.id}, status=status.HTTP_201_CREATED)
+        serializer = self.serializer_class(data=data)
 
-    #     return Response({'status': 'error', 'message': 'Notification not created', "data": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        if serializer.is_valid():
+            serializer_data = serializer.save(created_by=request.user.id)
+            return Response({'status': 'success', 'message': 'Notification created successfully.', 'data': serializer_data.id}, status=status.HTTP_201_CREATED)
 
-    def put(self, request, id):
+        return Response({'status': 'error', 'message': 'Notification not created', "data": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    def put(self, request):
+        id=request.data.get('id')
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
 
@@ -217,7 +246,8 @@ class NotificationView(APIView):
             return Response({'status': 'success', 'message': 'successfully update the data.','data':serializer.data},status=status.HTTP_200_OK)
         return Response({'status': 'error', 'message': 'data is not update.',"data":serializer.errors}, status=status.HTTP_404_NOT_FOUND)
     
-    def delete(self, request, id):
+    def delete(self, request):
+        id=request.data.get('id')
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
 

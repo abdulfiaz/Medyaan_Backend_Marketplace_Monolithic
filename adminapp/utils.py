@@ -1,7 +1,8 @@
 
-from notification.utils import create_notification
+from rest_framework import status
+from notification.serializers import NotificationSerializer
 
-def overallnotification(sender_id, receiver_id, event, subject, message, notification_message, iu_id, request_user,email_content=None):
+def overallnotification(sender_id, receiver_id, event, subject, message, notification_message, iu_id, request_user,role,email_id,email_content=None):
     data = {
         'sender': sender_id,
         'receiver': receiver_id,
@@ -11,7 +12,14 @@ def overallnotification(sender_id, receiver_id, event, subject, message, notific
         'notification_message': notification_message,
         'redirect_link': "https://example.com/",
         'iu_id': iu_id,
-        'email_content': email_content
+        'email_content': email_content,
+        'role':role,
+        'email_id':email_id
     }
-    notification_response = create_notification(data, request_user)
-    return notification_response
+    try:
+        serializer = NotificationSerializer(data=data)
+        if serializer.is_valid():
+            notification = serializer.save(created_by=request_user)
+    except Exception as e:
+        return {'status': 'error', 'message': 'Unexpected error occurred.'}
+

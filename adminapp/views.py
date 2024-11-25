@@ -10,23 +10,24 @@ from adminapp.iudetail import *
 
 
 class IUMasterAPI(APIView):
+    serializer_class=IUMasterSerializer
     def get(self, request):
-        iu_id = request.query_params.get('id')
+        id = request.query_params.get('id')
         rolename = get_user_roles(request)
 
         if rolename != 'admin':
             return Response({"status": "error", "message": "Only admin can have the access!"}, status=status.HTTP_403_FORBIDDEN)
-
+        fields=['id','name','domain','contact_mobile_no','address','logo','city','state',]
         try:
-            if iu_id:
+            if id:
                 try:
-                    iumaster = IUMaster.objects.get(id=iu_id, is_active=True)
+                    iumaster = IUMaster.objects.get(id=id, is_active=True)
                 except IUMaster.DoesNotExist:
                     return Response({"status": "error", "message": "IUMaster not found"}, status=status.HTTP_404_NOT_FOUND)
-                serializer = IUMasterSerializer(iumaster)
+                serializer = self.serializer_class(iumaster,fields=fields)
             else:
                 iumaster = IUMaster.objects.filter(is_active=True)
-                serializer = IUMasterSerializer(iumaster, many=True)
+                serializer = self.serializer_class(iumaster, many=True,fields=fields)
             
             return Response({"status": "success", "message": "IUMaster list retrieved successfully", "data": serializer.data}, status=status.HTTP_200_OK)
 
@@ -36,12 +37,12 @@ class IUMasterAPI(APIView):
     def post(self, request):
         rolename = get_user_roles(request)
         if rolename != "admin":
-            return Response({"status": "error", "message": "Only admin can access this!"}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"status": "error", "message": "Unauthorized User"}, status=status.HTTP_401_UNAUTHORIZED)
 
         transaction.set_autocommit(False)
         data=request.data
         data['created_by']=request.user.id
-        serializer = IUMasterSerializer(data=data)
+        serializer = self.serializer_class(data=data)
         if serializer.is_valid():
             serializer.save()
             transaction.commit()
@@ -51,24 +52,22 @@ class IUMasterAPI(APIView):
             return Response({"status": "error", "message":  serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request):
-        iu_id = request.data.get('id')
         rolename = get_user_roles(request)
 
         if rolename != "admin":
             return Response({"status": "error", "message": "Only admin can access this!"}, status=status.HTTP_403_FORBIDDEN)
-
-        if not iu_id:
-            return Response({"status":"error","message":"iu_id is required"})
+        id=request.data.get('id')
+        if not id:
+            return Response({"status":"error","message":"id is required"})
         
         try:
-            iumaster = IUMaster.objects.get(id=iu_id, is_active=True)
+            iumaster = IUMaster.objects.get(id=id, is_active=True)
         except IUMaster.DoesNotExist:
             return Response({"status": "error", "message": "IUMaster not found"}, status=status.HTTP_404_NOT_FOUND)
         
         transaction.set_autocommit(False)
         data=request.data
         data['modified_by']=request.user.id
-        print("modify---->",data['modified_by'])
         serializer = IUMasterSerializer(iumaster, data=data, partial=True)
         
         if serializer.is_valid():
@@ -81,16 +80,16 @@ class IUMasterAPI(APIView):
             return Response({"status": "error", "message": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request):
-        iu_id = request.data.get('id')
+        id=request.data.get('id')
         rolename = get_user_roles(request)
 
         if rolename != "admin":
             return Response({"status": "error", "message": "Only admin can access this!"}, status=status.HTTP_403_FORBIDDEN)
-        if not iu_id:
+        if not id:
             return Response({"status":"error","message":"iu_id is required"})
         
         try:
-            iumaster = IUMaster.objects.get(id=iu_id, is_active=True)
+            iumaster = IUMaster.objects.get(id=id, is_active=True)
         except IUMaster.DoesNotExist:
             return Response({"status": "error", "message": "IUMaster not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -108,24 +107,27 @@ class IUMasterAPI(APIView):
 
 class IUJsonMasterAPI(APIView):
     serializer_class=IUJsonMasterSerializers
-    def get(self,request,id=None):
+    def get(self,request):
         roles = get_user_roles(request)
+        if roles !="admin":
+            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        id = request.query_params.get('id')
+
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
-
-        if roles !="admin":
-            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
-        
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        fields=['id','channel_name','document_type','document_name','version','details']
         if id:
             iujsonmaster=IUJsonMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
-            serializer=self.serializer_class(iujsonmaster).data
+            serializer=self.serializer_class(iujsonmaster,fields=fields)
         else:
             iujsonmaster=IUJsonMaster.objects.filter(is_active=True,iu_id=iu_id)
-            serializer = self.serializer_class(iujsonmaster, many=True)
+            serializer = self.serializer_class(iujsonmaster, many=True,fields=fields)
 
         return Response({"status":"success","message":"successfully received data","data":serializer.data},status=status.HTTP_200_OK)
 
-    def post(self,request,id=None):
+    def post(self,request):
         roles = get_user_roles(request)
         if roles !="admin":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
@@ -134,7 +136,7 @@ class IUJsonMasterAPI(APIView):
         iu_id = get_iuobj(current_site)
 
         if not iu_id:
-            return Response({'status': 'failure', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
         data['iu_id'] = iu_id.id
 
         iujsonmaster=self.serializer_class(data=data)
@@ -145,14 +147,17 @@ class IUJsonMasterAPI(APIView):
         else:
             return Response({"status":"error","message":"data is not created","data":serializer_iu.errors},status=status.HTTP_400_BAD_REQUEST)
             
-    def put(self,request,id=None):
+    def put(self,request):
         roles = get_user_roles(request)
+        if roles !="admin":
+            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        id=request.data.get('id')
+
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
-
-        if roles !="admin":
-            return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
-    
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        
         iujsonmaster=IUJsonMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
        
         serializer=self.serializer_class(iujsonmaster,data=request.data,partial=True)
@@ -162,14 +167,17 @@ class IUJsonMasterAPI(APIView):
         else:
             return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
 
-    def delete(self,request,id=None):
+    def delete(self,request):
         roles = get_user_roles(request)
+        if roles !="admin":
+            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        id=request.data.get('id')
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
 
-        if roles !="admin":
-            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
-        
+        if not iu_id:
+            return Response({'status': 'failure', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+            
         iujsonmaster=IUJsonMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
         if iujsonmaster:            
             iujsonmaster.is_active = False

@@ -130,21 +130,21 @@ class CreateCustomUserView(APIView):
         
         domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
 
-        iu_master = get_iuobj(domain)
+        iu_id = get_iuobj(domain)
 
-        if not iu_master:
+        if not iu_id:
             return Response({'status': 'failure', 'message': 'IU domain not found.'},status=status.HTTP_404_NOT_FOUND)
 
         if role_name_get == 'admin' or role_name_get == 'manager':
             if role_name is None and role_name_get != 'admin':
-                users = [CustomUser.objects.get(id=user.id,iu_id = iu_master,is_active=True)]
+                users = [CustomUser.objects.get(id=user.id,iu_id = iu_id,is_active=True)]
             elif role_name is None and role_name_get == 'admin':
-                users = CustomUser.objects.filter(iu_id = iu_master,is_active=True)
+                users = CustomUser.objects.filter(iu_id = iu_id,is_active=True)
 
             elif (role_name == 'manager' and role_name_get == 'admin'):
-                users = CustomUser.objects.filter(custom_user__role__name='manager',iu_id = iu_master,is_active=True)
+                users = CustomUser.objects.filter(custom_user__role__name='manager',iu_id = iu_id,is_active=True)
             elif role_name == 'consumer':
-                users = CustomUser.objects.filter(custom_user__role__name='consumer',iu_id = iu_master,is_active=True)
+                users = CustomUser.objects.filter(custom_user__role__name='consumer',iu_id = iu_id,is_active=True)
             else:
                 return Response({"error": f"No users found for the role '{role_name}'."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -153,7 +153,7 @@ class CreateCustomUserView(APIView):
             return Response({"users": user_data.data}, status=status.HTTP_200_OK)
         
         else:
-            users = CustomUser.objects.filter(id=user.id,iu_id = iu_master,is_active=True)
+            users = CustomUser.objects.filter(id=user.id,iu_id = iu_id,is_active=True)
             user_data = GetCustomUserSerializer(users, many=True)
             return Response({"users": user_data.data}, status=status.HTTP_200_OK)
         
@@ -165,9 +165,9 @@ class CreateCustomUserView(APIView):
 
         domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
 
-        iu_master = get_iuobj(domain)
+        iu_id = get_iuobj(domain)
 
-        if not iu_master:
+        if not iu_id:
             return Response({'status': 'failure', 'message': 'IU domain not found.'},status=status.HTTP_404_NOT_FOUND)
 
         if auth_header:
@@ -183,7 +183,7 @@ class CreateCustomUserView(APIView):
         
         transaction.set_autocommit(False)
         data=request.data
-        data['iu_id']=iu_master.id
+        data['iu_id']=iu_id.id
 
         serializer = CustomUserSerializer(data=data)
 
@@ -205,13 +205,13 @@ class CreateCustomUserView(APIView):
             transaction.rollback()
             return Response({"error": f"Role '{role_name}' does not exist."},status=status.HTTP_400_BAD_REQUEST)
 
-        rolemap = RoleMapping(user=user, role=role, iu_id=iu_master)
+        rolemap = RoleMapping(user=user, role=role, iu_id=iu_id)
         rolemap.save()
 
         data_user = request.data
 
         
-        data_user['iu_id']= iu_master.id
+        data_user['iu_id']= iu_id.id
         data_user['user']= user.id
         data_user['created_by']= user.id 
         
@@ -230,13 +230,13 @@ class CreateCustomUserView(APIView):
 
         domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
 
-        iu_master = get_iuobj(domain)
+        iu_id = get_iuobj(domain)
 
-        if not iu_master:
+        if not iu_id:
             return Response({'status': 'failure', 'message': 'IU domain not found.'},status=status.HTTP_404_NOT_FOUND)
 
         try:
-            user = CustomUser.objects.get(id=request.user.id,iu_id=iu_master,is_active=True)
+            user = CustomUser.objects.get(id=request.user.id,iu_id=iu_id,is_active=True)
         except CustomUser.DoesNotExist:
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
         
@@ -252,7 +252,7 @@ class CreateCustomUserView(APIView):
             return Response(user_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user_profile = UserPersonalProfile.objects.get(user=user,iu_id=iu_master)
+            user_profile = UserPersonalProfile.objects.get(user=user,iu_id=iu_id)
             data =request.data
             data['modified_by']=request.user.id
             user_profile_serializer = UserPersonalProfileSerializer(user_profile, data=data, partial=True)
@@ -273,15 +273,15 @@ class CreateCustomUserView(APIView):
         user_id = request.data.get('user_id',None)
         role_name = get_user_roles(request)
         domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_master = get_iuobj(domain)
+        iu_id = get_iuobj(domain)
 
         if not user_id and role_name in ['admin', 'manager'] :
                 return Response({'status':'error','message':"user_id is required"},status=status.HTTP_404_NOT_FOUND)
         elif user_id is None:
             user_id = request.user.id
         try:
-            user = CustomUser.objects.get(id=user_id, iu_id=iu_master,is_active=True)
-            user_profile = UserPersonalProfile.objects.get(user=user, iu_id=iu_master,is_active=True)
+            user = CustomUser.objects.get(id=user_id, iu_id=iu_id,is_active=True)
+            user_profile = UserPersonalProfile.objects.get(user=user, iu_id=iu_id,is_active=True)
         except CustomUser.DoesNotExist:
             return Response({"status": "error", "message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 

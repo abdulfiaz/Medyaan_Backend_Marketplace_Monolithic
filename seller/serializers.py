@@ -14,7 +14,21 @@ class SellerApplicationDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model=SellerApplicationDetails
         fields=['id','user','details','application_status','is_rejected','reason','iu_id']
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super().__init__(*args, **kwargs)
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
 
+    def update(self, obj, validated_data):
+        for attr, value in validated_data.items():
+            if value:  
+                setattr(obj, attr, value)
+        obj.save()
+        return obj
 class SellerProfileSerializer(serializers.ModelSerializer):
     user = serializers.PrimaryKeyRelatedField(queryset=CustomUser.objects.all())
     class Meta:

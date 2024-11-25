@@ -7,11 +7,6 @@ app_name = 'seller'
 
 
 urlpatterns = [
-    path('approval/',SellerApplicationDetailsAPI.as_view(),name='seller-details'),
-    path('approval/<int:id>/',SellerApplicationDetailsAPI.as_view(),name='get-seller-details'),
-    path('get_seller/',ManagerApprovalView.as_view(),name='get_all_seller_details'),
-    path('get_seller/<int:id>/',ManagerApprovalView.as_view(),name='get_seller_status_details'),
-    
-
-
+    path('application/',SellerApplicationDetailsAPI.as_view(),name='seller-application'),
+    path('manager_approval/',ManagerApprovalView.as_view(),name='manager-approval'),
 ]

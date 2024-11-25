@@ -910,7 +910,8 @@ class BuyerView(APIView):
             return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
 
-class OrderDetailsAPI(APIView):
+class OrderDetails(APIView):
+    serializer_class=OrderItemsSerializer
     def get(self, request):
         try:
             role = get_user_roles(request)
@@ -946,53 +947,138 @@ class OrderDetailsAPI(APIView):
             return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
         
         except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+               
+    def put(self,request):
+
+        roles = get_user_roles(request)
+        data=request.data
+        order_id=data.get('id')
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if roles!='seller':
+            return Response({"status":"error","message":"Unauthorized  user"},status=status.HTTP_400_BAD_REQUEST)
+        order=OrderItems.objects.get(id=order_id,is_active=True,iu_id=iu_id)
+        user=CustomUser.objects.get(id=order.user.id)
+        product=order.product.product.name
+        serializer=self.serializer_class(order,data=request.data,partial=True)
+        if serializer.is_valid():
+            serializer.save(modified_by=request.user.id)
+            try:
+                template = TemplateMaster.objects.get(template_name="order_status_update")
+            except TemplateMaster.DoesNotExist:
+                return Response({"status": "error", "message": "Template not found"}, status=status.HTTP_400_BAD_REQUEST)
+
+            event= EventMaster.objects.get(name=template.template_name,iu_id=iu_id)
+            event_id = event.id
+
+            user_profile = UserPersonalProfile.objects.get(user=user)
+            user_name = f"{user_profile.firstname} {user_profile.lastname}"
+        
+            subject='Order status'
+            message="Your order status is moved by seller ."
+            notification = template.content.format(product, order.order_status)
+            email_context = {
+                "subject": subject,
+                "message": message,
+                "user_name":user_name,
+                "order_id":order.id,
+                "details":notification,
+            }
+            try:
+                email_content = render_to_string('order/buyer_notification.html', email_context)
+            except Exception as e:
+                return Response({"status": "error", "message": f"Error rendering email template: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+            sender_id = request.user.id
+            receiver_id=user.id        
+            notification = overallnotification(
+                sender_id=sender_id,
+                receiver_id=receiver_id,
+                event=event_id,
+                subject=subject,
+                message=message,
+                notification_message=notification,
+                iu_id=iu_id.id,
+                request_user=request.user.id,
+                email_content=email_content,
+                email_id=user.email,
+                role=event.role
+            )
+
+            return Response({"status":"success","message":"successfully update the changes"},status=status.HTTP_200_OK)
+        else:
+            return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
 
 class ProductMasterView(APIView):
     serializer_class=ProductMasterSerializer
-    
-    def get(self,request,id=None):
+    def get(self,request):
         roles = get_user_roles(request)
         if roles !="seller":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+       
+        product_id=request.query_params.get('product_id')
+        product_status=request.query_params.get('status')
+ 
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
-
         if not iu_id:
             return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        if id:
-            product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
-            serializer=self.serializer_class(product)
+       
+        total_counts = {
+                "pending": ProductMaster.objects.filter(product_status="pending", is_active=True,iu_id=iu_id,seller=request.user.id).count(),
+                "approved": ProductMaster.objects.filter(product_status="approved", is_active=True,iu_id=iu_id,seller=request.user.id).count(),
+                "rejected": ProductMaster.objects.filter(product_status="rejected", is_active=True,iu_id=iu_id,seller=request.user.id).count(),
+                }
+       
+       
+        fields=['id','name','body_content','description','product_status']
+        if product_id:
+            if product_status:
+                product=ProductMaster.objects.filter(id=product_id,is_active=True,iu_id=iu_id,seller=request.user.id,product_status=product_status).first()
+                serializer=self.serializer_class(product,fields=fields)
+            else:
+                product=ProductMaster.objects.filter(id=product_id,is_active=True,iu_id=iu_id,seller=request.user.id).first()
+                serializer=self.serializer_class(product,fields=fields)
         else:
-            product=ProductMaster.objects.filter(is_active=True)
-            serializer = self.serializer_class(product, many=True)
+            if product_status:
+                product=ProductMaster.objects.filter(is_active=True,iu_id=iu_id,seller=request.user.id,product_status=product_status)
+                serializer = self.serializer_class(product, many=True,fields=fields)
+                return Response({"status":"success","message":f"product status: {product_status}","data":serializer.data,"overall_count":total_counts},status=status.HTTP_200_OK)
+ 
+            else:
+                product=ProductMaster.objects.filter(is_active=True,iu_id=iu_id,seller=request.user.id)
+                serializer = self.serializer_class(product, many=True,fields=fields)
+                return Response({"status":"success","message":"product details","data":serializer.data,"overall_count":total_counts},status=status.HTTP_200_OK)
+ 
+ 
+        return Response({"status":"success","message":"product details","data":serializer.data},status=status.HTTP_200_OK)
 
-        return Response({"status":"success","message":"successfully received data","data":serializer.data},status=status.HTTP_200_OK)
-
-    def post(self,request,id=None):
+    def post(self,request):
         roles = get_user_roles(request)
         if roles !="seller":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
         data = request.data
         data['seller']=request.user.id
-
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        
         iu_id = get_iuobj(current_site)
-
         if not iu_id:
             return Response({'status': 'failure', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
         data['iu_id'] = iu_id.id
-
         product=self.serializer_class(data=data)
         if product.is_valid():
             serializer_iu=product.save(created_by=request.user.id)
-
-            return Response({"status":"success","message":"Successfully created","data":serializer_iu.id},status=status.HTTP_201_CREATED)
+            return Response({"status":"success","message":"product created successfully","data":serializer_iu.id},status=status.HTTP_201_CREATED)
         else:
             return Response({"status":"error","message":"product is not create","data":product.errors},status=status.HTTP_400_BAD_REQUEST)
             
-    def put(self,request,id=None):
+    def put(self,request):
         roles = get_user_roles(request)
+        data=request.data
+        id=data.get('product_id')
         if roles !="seller":
             return Response({"status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
@@ -1000,32 +1086,64 @@ class ProductMasterView(APIView):
 
         if not iu_id:
             return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
+        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id,seller=request.user.id)
        
         serializer=self.serializer_class(product,data=request.data,partial=True)
         if serializer.is_valid():
             serializer.save(modified_by=request.user.id)
-            return Response({"status":"success","message":"successfully update the data"},status=status.HTTP_200_OK)
+            return Response({"status":"success","message":"product update successfull"},status=status.HTTP_200_OK)
         else:
             return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
-
-    def delete(self,request,id=None):
+        
+    def delete(self, request):
+        id = request.data.get('id')
         roles = get_user_roles(request)
-        if roles !="seller":
-            return Response({ "status":"error","message":"Unauthorized user"},status=status.HTTP_401_UNAUTHORIZED)
+        if roles != "seller":
+            return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
+
         current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(current_site)
-
         if not iu_id:
             return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        product=ProductMaster.objects.get(id=id,is_active=True,iu_id=iu_id)
-        if product:            
+        
+        try:
+            product = ProductMaster.objects.get(id=id, is_active=True, iu_id=iu_id, seller=request.user.id)
+            variations = product.ProductVariation_product_master.filter(is_active=True, iu_id=iu_id)        
+            if variations.exists():
+                for variation in variations:
+                    order_status = variation.OrderItems_product.filter(iu_id=iu_id, is_active=True).exclude(order_status = "completed")
+                    if order_status:
+                        return Response({"status": "error","message": f"Cannot delete product with active orders {product.id}"}, status=status.HTTP_400_BAD_REQUEST)
             product.is_active = False
             product.save()
             return Response({"status": "success", "message": "Product deleted successfully"}, status=status.HTTP_200_OK)
-        else:
-            return Response({"status":"error","message":"data  is not delete"},status=status.HTTP_400_BAD_REQUEST)
 
+        except ProductMaster.DoesNotExist:
+            return Response({"status": "error", "message": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BuyerOrderDetailsAPI(APIView):
+    serializer_class=OrderItemsSerializer
+    def get(self,request):
+        order_status=request.GET.get('status')
+        roles = get_user_roles(request)
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+        fields=['id','product','quantity','price','order_status']
+
+        if roles!='consumer':
+            return Response({"status":"error","message":"Unauthorized  user"},status=status.HTTP_400_BAD_REQUEST)
+        if order_status in ['order_confirmed','rejected']:
+            order_details=OrderItems.objects.filter(user_id=request.user.id,is_active=True,iu_id=iu_id,order_status=order_status)
+            serializer=self.serializer_class(order_details,fields=fields,many=True)        
+        else:
+            order_details=OrderItems.objects.filter(user_id=request.user.id,is_active=True,iu_id=iu_id)
+            serializer=self.serializer_class(order_details,many=True,fields=fields)
+        return Response({"status": "success","message":"Order details","data": serializer.data}, status=status.HTTP_200_OK)        
               
 class UploadImagesAPI(APIView):
     def post(self,request):

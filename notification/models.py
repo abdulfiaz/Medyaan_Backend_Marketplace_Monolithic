@@ -58,18 +58,12 @@ def get_email(user_id):
 @receiver(post_save, sender=Notification)
 def send_notification_in_email(sender, instance, created, **kwargs):
     if instance.event.email:
-        sender_id = instance.sender
-        receiver_id = instance.receiver
+        sender_email = instance.sender.email
+        receiver_email= instance.receiver.email
 
-        sender_email = get_email(sender_id)
-        receiver_email = get_email(receiver_id)
         email_content=instance.email_content
-       
         if not sender_email or not receiver_email:
             return None
-
-        message = instance.notification_message
-
       
         subject = instance.subject
         email = EmailMessage(
