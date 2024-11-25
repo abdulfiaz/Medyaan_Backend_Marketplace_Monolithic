@@ -38,6 +38,7 @@ from django.template.loader import render_to_string
 from order.utils import *
 
 
+
 class CategoryMasterAPI(APIView):
     serializer_class = Categoryserializer
     def get(self,request):
@@ -143,7 +144,6 @@ class CategoryMasterAPI(APIView):
             serializer.save()
             return Response({"status": "success","message":"Updated successfully"}, status=status.HTTP_200_OK)
         return Response({"status":"error","message":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
 
     def delete(self,request):
        
@@ -910,7 +910,7 @@ class BuyerView(APIView):
             return Response({"status": "error", "message": "An unexpected error occurred: " + str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
  
 
-class OrderDetails(APIView):
+class OrderDetailsAPI(APIView):
     def get(self, request):
         try:
             role = get_user_roles(request)
@@ -1224,9 +1224,6 @@ class OrderInvoiceAPI(APIView):
                 
                 if product_detail.stock < product['product_quantity']:
                     return Response({"status": "error", "message": f"Insufficient stock for product {product_detail.product.name}"},status=status.HTTP_400_BAD_REQUEST)
-
-                product_detail.stock -= product['product_quantity']
-                product_detail.save()
                 
                 variant_option = VariantOption.objects.get(id=product_detail.variation.id,iu_id=iu_id, is_active=True)
                 seller = SellerProfile.objects.get(user=product_detail.product.seller,iu_id=iu_id, is_active=True)
@@ -1298,7 +1295,6 @@ class OrderInvoiceAPI(APIView):
             elif total_discount_amount>0:
                 total_discount_percentage = (total_discount_amount /overall_total ) *100
                 overall_total_amount = overall_total- total_discount_amount
-            
             invoice_model.tax_amount=tax_amount
             invoice_model.total_discount_percentage=total_discount_percentage if total_discount_percentage>0 else None
             invoice_model.total_discount_amount=total_discount_amount if  total_discount_amount>0 else discount_amount
@@ -1337,97 +1333,183 @@ class OrderInvoiceAPI(APIView):
             return Response({"status": "error", "message": "data not found"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)    
-       
-class PaymentDetailsAPIView(APIView):
+
+class OrderTypeAPI(APIView):
     
-    def post(self, request):
-        domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+    def get(self, request):
+        order_type_id = request.query_params.get('order_type_id', None)
+        role_name = get_user_roles(request)
+        domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
         iu_id = get_iuobj(domain)
-        
+
+        if role_name != 'admin':
+            return Response({"status": "error", "message": "only admin can view order type master details"}, status=status.HTTP_401_UNAUTHORIZED)
+
         try:
+            if order_type_id:
+                order_type_master = OrderTypeMaster.objects.get(id=order_type_id, iu_id=iu_id, is_active=True)
+                serializer =OrderTypeMasterSerializer(order_type_master)  
+            else:
+                
+                order_type_master = OrderTypeMaster.objects.filter(iu_id=iu_id, is_active=True)
+                serializer = OrderTypeMasterSerializer(order_type_master, many=True)  
+
+            return Response({"status": "success", "message": "data retrieved successfully", "data": serializer.data}, status=status.HTTP_200_OK)
+
+        except OrderTypeMaster.DoesNotExist:
+            return Response({"status": "error", "message": "PaymentType not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def post(self,request):
+        try:
+            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+
+            role_name = get_user_roles(request)
+
+            if role_name != 'admin':
+                return Response({"status":"error","message":"only admin can create OrderTypeMaster"},status=status.HTTP_401_UNAUTHORIZED)
+            
             transaction.set_autocommit(False)
             data = request.data
             data['created_by'] = request.user.id
             data['iu_id'] = iu_id.id
-            try:
-                order_details = OrderDetails.objects.get(id=data['order_details_id'],iu_id=iu_id,is_active=True)
-                data['order']=order_details.id
-            except OrderDetails.DoesNotExist:
-                return Response({"status":"error","message":"data not found"},status=status.HTTP_404_NOT_FOUND)
-            try:  
-                payment_type = PaymentTypeMaster.objects.get(id=data['payment_type_id'],iu_id=iu_id,is_active=True)
-                data['payment_type']=payment_type.id
-                if payment_type.name==CASH_ON_DELIVERY:
-                    data['return_amount']=data['paid_ammount']-order_details.total_price
-                  
-                data['paid_amount']=order_details.total_price
-                
-            except PaymentTypeMaster.DoesNotExist:
-                return Response({"status": "error", "message": "PaymentTypeMaster not found"}, status=status.HTTP_404_NOT_FOUND)
-            try:
-                OrderItems.objects.filter(order=order_details, iu_id=iu_id, is_active=True).update(order_status=ORDER_CONFIRMED)
-                
-                InvoiceModel.objects.filter(order_detail=order_details, iu_id=iu_id, is_active=True).update(status=ORDER_CONFIRMED)
-                
-            except OrderItems.DoesNotExist or InvoiceModel.DoesNotExist:
-                return Response({"status": "error", "message": "data not found"}, status=status.HTTP_404_NOT_FOUND) 
-               
-            serializer = PaymentDetailsSerializer(data=data)
+
+            serializer = OrderTypeMasterSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
                 transaction.commit()
-                return Response({"status":"success","message":"paymenttype created successfully"},status=status.HTTP_201_CREATED)
-            
+                return Response({"status":"success","message":"ordertype created successfully"},status=status.HTTP_201_CREATED)
             else:
+                transaction.rollback()
                 return Response({"status":"error","message":serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-        
         except Exception as e:
-            return Response({"status": "error", "messages": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def put(self,request):
+        try:
+            domain = request.META.get('HTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+            role_name = get_user_roles(request)
+            order_type_master_id = request.data.get('order_type_master_id')
 
+            if not order_type_master_id :
+                return Response({"status":"error","message":"order_type_master id is required"},status=status.HTTP_400_BAD_REQUEST)
+
+            if role_name != 'admin':
+                return Response({"status":"error","message":"only admin can update this"},status=status.HTTP_401_UNAUTHORIZED)
+            
+            try:
+                order_type_obj = OrderTypeMaster.objects.get(id=order_type_master_id,iu_id=iu_id,is_active=True)
+            except OrderTypeMaster.DoesNotExist:
+                return Response({"status": "error", "message": "OrderTypeMaster not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            transaction.set_autocommit(False)
+            data = request.data
+            data['modified_by']=request.user.id
+            data['iu_id']=iu_id.id
+
+            serializer = OrderTypeMasterSerializer(order_type_obj,data=data,partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                transaction.commit()
+                return Response({"status": "success", "message": "OrderType updated successfully"}, status=status.HTTP_200_OK)
+            else:
+                transaction.rollback()
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def delete(self,request):
+        try:
+            order_type_master_id = request.data.get('order_type_master_id')
+            role_name = get_user_roles(request)
+            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+            iu_master = get_iuobj(domain)
+
+            if not order_type_master_id:
+                return Response({'status':'error','message':"id is required"},status=status.HTTP_404_NOT_FOUND)
+            
+            if role_name != 'admin':
+                return Response({"status":"error","message":"only admin can delete this"},status=status.HTTP_401_UNAUTHORIZED)
+            
+            try:
+                order_type_obj = OrderTypeMaster.objects.get(id=order_type_master_id, iu_id=iu_master,is_active=True)
+            except OrderTypeMaster.DoesNotExist:
+                return Response({"status": "error", "message": "id not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            transaction.set_autocommit(False)
+            serializer = OrderTypeMasterSerializer(order_type_obj, data={'is_active': False,'modified_by':request.user.id}, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                transaction.commit()
+                return Response({"status": "success", "message": "order_type deleted successfully"}, status=status.HTTP_200_OK)
+
+            else:
+                transaction.rollback()
+                return Response({"status":"error","message":serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
 
 class ProductFetchAPI(APIView):
-
-    def get(self,request):
+    
+    def get(self, request):
         try:
-            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
             iu_id = get_iuobj(domain)
-            product_name = request.query_params.get("name")
-            product_type = request.query_params.get("type",None)
-            id = request.query_params.get("id")
-            min_price = request.query_params.get("min_price")
-            max_price = request.query_params.get("max_price")
             
-            products = None 
-            if product_type is not None:
-                if product_type == VARIANT and id:
-                    variant = VariantOption.objects.filter(pk=id,iu_id=iu_id, is_active=True)
-                    if variant:
-                        products = ProductVariation.objects.filter(variation_id=id,iu_id=iu_id, is_active=True)
+            start_count = int(request.query_params.get('startcount',0))
+            end_count = int(request.query_params.get('endcount',10))
+            product_name = request.query_params.get("name", None)
+            product_type = request.query_params.get("type", None)
+            variant_id = request.query_params.get("variant_id", None)
+            id = request.query_params.get("id", None)
+            min_price = request.query_params.get("min_price", None)
+            max_price = request.query_params.get("max_price", None)
 
-                elif product_type == PRODUCT and id:
-                    products = ProductVariation.objects.filter(pk=id,iu_id=iu_id, is_active=True)
+            products_master = None
+
+            if product_type == PRODUCT and id:
+                products_master = ProductMaster.objects.filter(pk=id, iu_id=iu_id, is_active=True)
 
             elif product_name:
-                print(product_name)
-                products = ProductMaster.objects.filter(name__istartswith=product_name,iu_id=iu_id, is_active=True)
-            if products is not None:
-                if min_price:
-                    products = products.filter(selling_price__gte=min_price)
-                if max_price:
-                    products = products.filter(selling_price__lte=max_price)
+                products_master = ProductMaster.objects.filter(name__istartswith=product_name, iu_id=iu_id, is_active=True)
 
-            if not products:
-                return Response({"status": "success","message": "No products found","data": []})
+            if not products_master:
+                return Response({"status": "success", "message": "No products found", "data": []})
+            
+            product_ids = products_master.values_list('id', flat=True)
+            products = ProductVariation.objects.filter(product_id__in=product_ids, iu_id=iu_id, is_active=True)
 
-            if product_type in [VARIANT, PRODUCT]:
-                serializer = ProductVariationSerializer(products, many=True)
-            else:
-                serializer = ProductMasterSerializer(products, many=True)
+            variant = None
+            if variant_id:
+                try:
+                    variant = VariantOption.objects.get(pk=variant_id, iu_id=iu_id, is_active=True)
+                    products = products.filter(variation=variant)
+                except VariantOption.DoesNotExist:
+                    return Response({"status": "failed", "message": "Invalid variant ID."}, status=status.HTTP_400_BAD_REQUEST)                
+            
+            if min_price:
+                products = products.filter(selling_price__gte=min_price)
+            if max_price:
+                products = products.filter(selling_price__lte=max_price)
 
-            return Response({"status": "success","message": "Data successfully retrieved","data": serializer.data})
+            if not products.exists():
+                return Response({"status": "success", "message": "No products found", "data": []})
+            products = products[start_count:end_count+1]
+
+            serializer = ProductVariationSerializer(products, many=True)
+            return Response({"status": "success","message": "Data successfully retrieved","data": serializer.data,"count": products.count(),},status=status.HTTP_200_OK,)
 
         except Exception as e:
-            return Response({"status": "failed","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": "failed", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+
+
 
 class WishListAPI(APIView):
     
@@ -1629,3 +1711,258 @@ class FeedbackAPI(APIView):
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
+    def put(self,request):
+        data=request.data
+        user=request.user
+        likes=data.get("likes",None)
+        dislikes=data.get("dislikes",None)
+        try:
+            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            iu_id = get_iuobj(domain)
+            if data['feedback_id']:
+                try:
+                    feedback = FeedbackDetails.objects.get(id=data['feedback_id'],iu_id=iu_id,is_active=True)
+                    if likes is not None:
+                        user_dislike=feedback.dislikes.filter(id=user.id)
+           
+                        if user_dislike:
+                            feedback.dislikes.remove(user)
+
+                        feedback.likes.add(user)
+                                
+                    elif dislikes is not None:
+                        user_like=feedback.likes.filter(id=user.id)
+           
+                        if user_like:
+                            feedback.likes.remove(user)
+
+                        feedback.dislikes.add(user)
+                        
+                    feedback.save()    
+                    print(feedback.dislikes)
+                    return Response({"status":"success","message":f"{likes if likes else dislikes} the feedback successfully"},status=status.HTTP_200_OK) 
+                    
+                except FeedbackDetails.DoesNotExist:
+                    return Response({"status":"error","message":"feedback id not found"},status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"status": "error","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+
+class InvoiceModelAPI(APIView):   
+    def get(self, request):
+        if not request.user:
+            return Response({"status": "error", "message": "Token not found"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)  
+            iu_id = get_iuobj(domain)
+            
+            order_detail_id = request.query_params.get('order_detail_id')
+            if not order_detail_id:
+                return Response({"status": "error", "message": "Order detail ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                order_detail = OrderDetails.objects.get(is_active=True, iu_id=iu_id, pk=order_detail_id)
+                invoice_models = InvoiceModel.objects.get(is_active=True, iu_id=iu_id, order_detail=order_detail)
+                invoice_items = InvoiceItems.objects.filter(is_active=True, iu_id=iu_id, invoice=invoice_models)
+                invoice_items_serializer= InvoiceItemsSerializer(invoice_items, many=True,fields=['quantity','unit_price','tax_rate','tax_amount','discount_percentage','discount_amount','total']).data
+                
+                user=UserPersonalProfile.objects.get(user=order_detail.user)
+                user_details=UserPersonalProfileSerializer(user,fields=['firstname','lastname']).data
+
+                
+                return Response({
+                    "status": "success", 
+                    "message": "Invoice details retrieved successfully", 
+                    "invoice_model": invoice_items_serializer,
+                    "user_details":user_details
+                }, status=status.HTTP_200_OK)
+            
+            except OrderDetails.DoesNotExist:
+                return Response({"status": "error", "message": "Order details not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class PaymentDetailsAPIView(APIView):
+    def get(self,request):
+        try:
+            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)  
+            iu_id = get_iuobj(domain)
+            
+            payment_detail_id = request.query_params.get('payment_detail_id')
+            if not payment_detail_id:
+                return Response({"status": "error", "message": "Payment detail ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                payment_details=PaymentDetails.objects.get(pk=payment_detail_id,is_active=True)
+                
+                payment_reference=PaymentReference.objects.filter(payment_detail=payment_details.id,is_active=True)
+                payment_serializer=PaymentDetailsSerializer(payment_details,fields=['order','paid_amount','payment_status','due','total_amount']).data
+                payment_serializer['payment_reference']= PaymentReferenceSerializer(payment_reference, many=True,fields=['amount','remarks']).data
+                
+                return Response({"status":"success","message":"Payment retrieved successfully","data": payment_serializer},status=status.HTTP_200_OK)
+
+            except PaymentDetails.DoesNotExist :
+                return Response({"status": "error", "message": "Payment details not found"}, status=status.HTTP_404_NOT_FOUND)
+                
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
+    def post(self, request):
+        try:
+            user=request.user
+            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)  
+            iu_id = get_iuobj(domain)
+            data=request.data
+            try:
+                order_type=OrderTypeMaster.objects.get(name=data['order_type_name'],iu_id=iu_id,is_active=True)
+            except OrderTypeMaster.DoesNotExist:
+                return Response({"status": "error", "message": "Order type not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            try:
+                if order_type.name==ORDER_DETAILS:
+                    order=OrderDetails.objects.get(id=data['order'],iu_id=iu_id,user=user,is_active=True)
+            except OrderDetails.DoesNotExist:
+                return Response({"status": "error", "message": "Order details not found"}, status=status.HTTP_404_NOT_FOUND)    
+            transaction.set_autocommit(False)
+            payment_details_data={
+                'ordertype':order_type.id,
+                'order':order.id,
+                'total_amount':order.total_price,
+                'iu_id':iu_id.id,
+                'created_by':user.id
+            }
+            payment_deatils_serializer = PaymentDetailsSerializer(data=payment_details_data)
+            if payment_deatils_serializer.is_valid():
+                payment_details = payment_deatils_serializer.save()
+            else:
+                return Response({"status": "error","message":payment_deatils_serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+            total_paid=0 
+            payment_reference=None          
+            for reference_data in data['payment_references']:
+                try:
+                    payment_type_obj = PaymentTypeMaster.objects.get(name=reference_data['payment_method'],iu_id=iu_id,is_active=True)
+
+                    remaining_due = order.total_price - total_paid
+
+                    if reference_data['amount'] > remaining_due:
+                        return Response({"status": "error","message": f"Your payment amount ({reference_data['amount']}) exceeds the required amount ({remaining_due})."}, status=status.HTTP_400_BAD_REQUEST)
+
+                    total_paid += reference_data['amount']     
+                            
+                except PaymentTypeMaster.DoesNotExist:
+                    return Response({"status": "error", "message": "PaymentTypeMaster not found"}, status=status.HTTP_404_NOT_FOUND)
+                
+                payment_reference_data={
+                    "payment_detail":payment_details.id,
+                    'payment_type':payment_type_obj.id,
+                    'amount':reference_data['amount'],
+                    'remarks':reference_data['remarks'],
+                    'created_by':user.id
+                }
+                
+                payment_reference_serializer = PaymentReferenceSerializer(data=payment_reference_data)
+                
+                if payment_reference_serializer.is_valid():
+                    payment_reference = payment_reference_serializer.save()
+                else:
+                    return Response({"status": "error","message":payment_reference_serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+                
+            payment_details.paid_amount = total_paid
+            payment_details.due = payment_details.total_amount - total_paid
+            payment_details.payment_status = "completed" if payment_details.due == 0 else "partial paid"
+            payment_details.save()
+            
+            if payment_details.due == 0 :
+                try:
+                    orderitems=OrderItems.objects.filter(order=order, iu_id=iu_id, is_active=True)
+                    item_count=orderitems.count()
+                    
+                    for orderitem in orderitems:
+                        orderitem.order_status=ORDER_CONFIRMED
+                        
+                        product_variation=ProductVariation.objects.get(pk=orderitem.product.id,iu_id=iu_id,is_active=True)
+                        product_variation.consumable_quantity+=orderitem.quantity
+                        product_variation.stock-=orderitem.quantity
+                        
+                        product_variation.save()
+                        orderitem.save()
+                    
+                    order.item_count=item_count
+                    order.save()
+                    
+                    InvoiceModel.objects.filter(order_detail=order, iu_id=iu_id, is_active=True).update(status=ORDER_CONFIRMED)
+            
+                    
+                except OrderItems.DoesNotExist or InvoiceModel.DoesNotExist:
+                    return Response({"status": "error", "message": "data not found"}, status=status.HTTP_404_NOT_FOUND) 
+            
+            transaction.commit()            
+            return Response({"status":"success","message": "Payment details and references created successfully.", },status=status.HTTP_201_CREATED)
+           
+        except Exception as e:
+            transaction.rollback()
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def put(self,request):
+        try:
+            user=request.user
+            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)  
+            iu_id = get_iuobj(domain)
+            data=request.data
+            try:
+                payment_details=PaymentDetails.objects.get(pk=data['payment_details_id'],created_by=user.id,is_active=True)
+            except PaymentDetails.DoesNotExist:
+                return Response({"status": "error", "message": "payment details not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            transaction.set_autocommit(False)
+            total_paid=payment_details.paid_amount           
+            for reference_data in data['payment_references']:
+                try:  
+                    payment_type_obj = PaymentTypeMaster.objects.get(name=reference_data['payment_method'],iu_id=iu_id,is_active=True)
+                    print(reference_data['amount'])
+                    if reference_data['amount'] > payment_details.due:
+                        return Response({"status": "error", "message": f"your payment amount is more than required amount {payment_details.due}"}, status=status.HTTP_400_BAD_REQUEST)
+                    total_paid+=reference_data['amount']   
+                          
+                except PaymentTypeMaster.DoesNotExist:
+                    return Response({"status": "error", "message": "PaymentTypeMaster not found"}, status=status.HTTP_404_NOT_FOUND)
+                
+                payment_reference_data={
+                    "payment_detail":payment_details.id,
+                    'payment_type':payment_type_obj.id,
+                    'amount':reference_data['amount'],
+                    'remarks':reference_data['remarks'],
+                    'created_by':user.id
+                }
+                
+                payment_reference_serializer = PaymentReferenceSerializer(data=payment_reference_data)
+                
+                if payment_reference_serializer.is_valid():
+                    payment_reference = payment_reference_serializer.save()
+                else:
+                    return Response({"status": "error","message":payment_reference_serializer.errors},status=status.HTTP_400_BAD_REQUEST)
+                
+            payment_details.paid_amount = total_paid
+            payment_details.due = payment_details.total_amount - total_paid
+            payment_details.payment_status = "completed" if payment_details.due == 0 else "partial paid"
+            payment_details.save()
+            
+            if payment_details.due == 0 :
+                try:
+                    OrderItems.objects.filter(order=payment_details.order, iu_id=iu_id, is_active=True).update(order_status=ORDER_CONFIRMED)
+                    
+                    InvoiceModel.objects.filter(order_detail=payment_details.order, iu_id=iu_id, is_active=True).update(status=ORDER_CONFIRMED)
+                    
+                except OrderItems.DoesNotExist or InvoiceModel.DoesNotExist:
+                    return Response({"status": "error", "message": "data not found"}, status=status.HTTP_404_NOT_FOUND)
+                
+            transaction.commit()
+                    
+            return Response({"status":"success","message": "Payment references created successfully.", },status=status.HTTP_201_CREATED)
+               
+        except Exception as e:
+            transaction.rollback()
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            

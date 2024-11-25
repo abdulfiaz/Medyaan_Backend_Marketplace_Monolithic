@@ -10,6 +10,7 @@ CASH_ON_DELIVERY="cash on delivery"
 VARIANT="variant"
 PRODUCT="product"
 ORDER_CONFIRMED="order_confirmed"
+ORDER_DETAILS='order_details'
 
 def upload_image_s3(image_file, file_name):
     try:

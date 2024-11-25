@@ -297,11 +297,56 @@ class PaymentTypeMasterSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentTypeMaster
         fields = '__all__'
-
+        
+class OrderTypeMasterSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderTypeMaster
+        fields = '__all__'
+    
 class PaymentDetailsSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentDetails
-        fields = ['order', 'payment_type', 'paid_amount', 'payment_status', 'return_amount']
+        fields = '__all__'
+        
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super(PaymentDetailsSerializer, self).__init__(*args, **kwargs)
+
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+    def to_representation(self,instance):
+        data=super().to_representation(instance)
+        
+        ordertype_details=OrderTypeMasterSerializer (instance.ordertype).data
+        data['order_type']={field:ordertype_details[field] for field in ['id','name','description']}
+
+        return data
+        
+class PaymentReferenceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentReference
+        fields = '__all__'
+        
+    def __init__(self, *args, **kwargs):
+        fields = kwargs.pop('fields', None)
+        super(PaymentReferenceSerializer, self).__init__(*args, **kwargs)
+
+        if fields is not None:
+            allowed = set(fields)
+            existing = set(self.fields)
+            for field_name in existing - allowed:
+                self.fields.pop(field_name)
+                
+    def to_representation(self,instance):
+        data=super().to_representation(instance)
+        
+        paymenttype_details=PaymentTypeMasterSerializer(instance.payment_type).data
+        data['payment_type']={field:paymenttype_details[field] for field in ['id','name','description']}
+
+        return data
 
 class GetPaymentTypeMasterSerializer(serializers.ModelSerializer):
     class Meta:
