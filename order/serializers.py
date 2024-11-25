@@ -4,12 +4,13 @@ from users.serializers import *
 import random
 import string
 
-class SubCategorySerializer(serializers.ModelSerializer):
-    
+class Categoryserializer(serializers.ModelSerializer):
+    is_parent_category = serializers.SerializerMethodField()
+    parent_category_id = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductCategoryMaster
-        fields = ['id', 'name', 'description','iu_id','created_by','modified_by']
-
+        fields = ['id', 'name', 'description', 'is_parent_category','parent_category_id','image','created_by','iu_id','modified_by']
 
     def update(self, obj, validated_data):
         
@@ -18,15 +19,6 @@ class SubCategorySerializer(serializers.ModelSerializer):
                 setattr(obj, attr, value)
         obj.save()
         return obj
- 
-
-class Categoryserializer(serializers.ModelSerializer):
-    is_parent_category = serializers.SerializerMethodField()
-    parent_category_id = serializers.SerializerMethodField()
-
-    class Meta:
-        model = ProductCategoryMaster
-        fields = ['id', 'name', 'description', 'is_parent_category','parent_category_id','created_by','iu_id','modified_by']
 
     def __init__(self, *args, **kwargs):
         fields = kwargs.pop('fields', None)
@@ -68,10 +60,11 @@ class VariantMasterSerializer(serializers.ModelSerializer):
                 setattr(obj, attr, value)
         obj.save()
         return obj
+    
+   
  
  
 class VariantOptionSerializer(serializers.ModelSerializer):
-    variation=VariantMasterSerializer(fields=['id','category','name', 'description'])
     class Meta:
         model=VariantOption
         fields=['id','variation','name', 'description','iu_id','image','created_by','modified_by']
@@ -146,6 +139,8 @@ class ProductVariationSerializer(serializers.ModelSerializer):
                 setattr(obj, attr, value)
         obj.save()
         return obj
+    
+    
     
     
 class OrderDetailsSerializer(serializers.ModelSerializer):
