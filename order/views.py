@@ -266,7 +266,7 @@ class VariantMasterAPI(APIView):
             variant_data= get_object_or_404(VariantMaster, id=master_id,iu_id=iu_id)
             variant_options=VariantOption.objects.filter(variation=variant_data,iu_id=iu_id)
             for variant in variant_options:
-                order_status=variant.OrderItems_variation.filter(iu_id=iu_id,is_active=True).exclude(order_status = "completed")
+                order_status=variant.OrderItems_variation.filter(iu_id=iu_id,is_active=True).exclude(order_status = "ORDER_CONFIRMED")
                 for order in order_status:
                     if order:  
                         return Response({"status": "error","message": f"Cannot delete variant with active orders {variant_data.id}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -382,9 +382,12 @@ class VariantOptionAPI(APIView):
         data['iu_id']=iu_id.id
         
         id = data.get('variant_option_id')
-        variant= get_object_or_404(VariantOption, id=id,iu_id=iu_id)
-
-        if variant:
+        if id:
+            variant= get_object_or_404(VariantOption, id=id,iu_id=iu_id)
+            order_status=variant.OrderItems_variation.filter(iu_id=iu_id,is_active=True).exclude(order_status = "ORDER_CONFIRMED")
+            if order_status:
+                return Response({"status": "error","message": f"Cannot delete variant option with active orders {variant.id}"}, status=status.HTTP_400_BAD_REQUEST)
+            
             variant.is_active=False
             variant.modified_by = request.user.id
             variant.save()
@@ -410,9 +413,9 @@ class ProductVariationAPI(APIView):
 
             seller_id=request.user.id
 
-            id = request.query_params.get('id')
+            id = request.query_params.get('product_variant_id')
 
-            fields=['id', 'product', 'variation', 'total_price', 'selling_price', 'stock','tax_rate','tax_amount']
+            fields=['id', 'total_price', 'selling_price', 'stock','tax_rate','tax_amount']
 
             product_variant_data=[]
             
@@ -512,7 +515,6 @@ class ProductVariationAPI(APIView):
             sms_templateid=template.id,
         ) 
         role=event.role
-        print("role",role)
        
 
         if event:
@@ -522,63 +524,59 @@ class ProductVariationAPI(APIView):
             variant_name = variantoption.name  
             product_variant_id = data.id  
             seller_id = request.user.id  
-           
+
             manager_ids = RoleMapping.objects.filter(role=manager_role).values_list('user_id', flat=True)
-            print("manger_ids",manager_ids)
+            managers = CustomUser.objects.filter(id__in=manager_ids)
+
+            sender_id = request.user.id
             
+            for manager in managers:
+                manager_profile = UserPersonalProfile.objects.filter(user_id=manager).first()
+                manager_first_name = manager_profile.firstname if manager_profile else "Manager"
+                manager_email = manager.email if manager else None
+
+
+                message=template.content.format(business_name=business_name,
+                seller_id=seller_id,
+                product_id=product_id,
+                product_name=product_name,
+                product_variant_id=product_variant_id,
+                variant_name=variant_name,
+                manager_name=manager_first_name
+                )
            
-            
-            if manager_ids:
-                sender_id = request.user.id
-                print("sender_id",sender_id)
-                for manager_id in manager_ids:
-                    manager = UserPersonalProfile.objects.filter(user_id=manager_id).first()
-                    print("22",manager)
-                    manager_mail=CustomUser.objects.filter(id__in=manager_id).values_list('email', flat=True)
-                    print("!!!",manager_mail)
-                    manager_first_name = manager.firstname if manager else ()
 
-                    content={
-                        'business_name': business_name,
-                        'seller_id':seller_id,
-                        'product_id':product_id,
-                        'product_name': product_name,
-                        'product_variant_id': product_variant_id,
-                        'variant_name':variant_name,
-                        'manager_name': manager_first_name
-                        }
-                    
-                    rendered_html_message = render_to_string('order/product_creation_notification.html',content)
+               
+                content={
+                    'business_name': business_name,
+                    'seller_id':seller_id,
+                    'product_id':product_id,
+                    'product_name': product_name,
+                    'product_variant_id': product_variant_id,
+                    'variant_name':variant_name,
+                    'manager_name': manager_first_name,
+                    }
+                
+                rendered_html_message = render_to_string('order/product_creation_notification.html',content)
+  
+                overallnotification(
+                    sender_id=sender_id,
+                    receiver_id=manager.id,
+                    event=event.id,
+                    subject='New Product was Created',
+                    message="A new product has been created.",
+                    notification_message=message,
+                    email_content=rendered_html_message,
+                    iu_id=iu_obj.id,
+                    role=role,
+                    request_user=request.user.id,
+                    email_id= manager_email 
 
-                    message=template.content.format(business_name=business_name,
-                    seller_id=seller_id,
-                    product_id=product_id,
-                    product_name=product_name,
-                    product_variant_id=product_variant_id,
-                    variant_name=variant_name,
-                    manager_name=manager_first_name
-                    )
-
-                  
-                    overallnotification(
-                        sender_id=sender_id,
-                        receiver_id=manager_id,
-                        event=event.id,
-                        subject='New Product was Created',
-                        message="A new product has been created.",
-                        notification_message=message,
-                        email_content=rendered_html_message,
-                        iu_id=iu_obj.id,
-                        role=role,
-                        request_user=request.user.id,
-                        email_id=manager_mail
-
-                    )
-                   
+                )
             return Response({"status": "success", "message": "Product was created and notifications sent successfully"}, status=status.HTTP_201_CREATED)
         else:
             return Response({"status": "error", "message": "Event not found or conditions not met"}, status=status.HTTP_404_NOT_FOUND)
-            
+        
     def put(self, request):
         role = get_user_roles(request)
         if role != 'seller':
@@ -634,9 +632,11 @@ class ProductVariationAPI(APIView):
         data['iu_id']=iu_id.id
         
         id = data.get('product_variantion_id')
-        Product_variation= get_object_or_404(ProductVariation,id=id,iu_id=iu_id)
-
-        if  Product_variation:
+        if id:
+            Product_variation= get_object_or_404(ProductVariation,id=id,iu_id=iu_id)
+            order_status=Product_variation.OrderItems_product.filter(iu_id=iu_id, is_active=True).exclude(order_status = "ORDER_CONFIRMED")
+            if order_status:
+                return Response({"status": "error","message": f"Cannot delete product variant {Product_variation.id}"}, status=status.HTTP_400_BAD_REQUEST)
             Product_variation.is_active=False
             Product_variation.modified_by = request.user.id
             Product_variation.save()
@@ -770,6 +770,7 @@ class ManagerdetailsAPI(APIView):
             iu_id=iu_id.id,
             sms_templateid=template.id,
         )
+        role=event.role
 
         if event:
             product_name=product.name,
@@ -785,6 +786,8 @@ class ManagerdetailsAPI(APIView):
             message=template.content.format(product_name=mail_content['product_name'],product_status=mail_content['product_status'])
 
             sender_id = request.user.id
+            seller=CustomUser.objects.get(id=sender_id)
+            seller_mail=seller.email
 
             overallnotification(
                 sender_id=sender_id,
@@ -795,7 +798,9 @@ class ManagerdetailsAPI(APIView):
                 notification_message=message,
                 email_content=rendered_html_message,
                 iu_id=iu_id.id,
-                request_user=request.user.id
+                request_user=request.user.id,
+                role=role,
+                email_id= seller_mail
             )
            
 
@@ -865,7 +870,7 @@ class SellerOrderStatus(APIView):
             seller = request.user.id
             
             order_status = request.query_params.get('order_status')  
-            allowed_statuses = ['pending', 'delivered', 'shipping', 'order_confirmed']
+            allowed_statuses = ['pending', 'delivered', 'shipping', 'order_confirmed','returned','cancelled']
             if order_status not in allowed_statuses:
                 return Response({"status": "error", "message": "Invalid order status"}, status=status.HTTP_400_BAD_REQUEST)
             
@@ -888,50 +893,6 @@ class SellerOrderStatus(APIView):
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-
-
-
-
-
-
-    serializer_class=OrderItemsSerializer
-    def get(self, request):
-        try:
-            role = get_user_roles(request)
-            if role != 'consumer':
-                return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
-            
-            seller = request.user.id
-            
-            order_status = request.query_params.get('order_status')  
-           
-           
-            allowed_statuses = ['pending', 'delivered', 'shipping', 'order_confirmed']
-            
-            if order_status not in allowed_statuses:
-                return Response({"status": "error", "message": "Invalid order status"}, status=status.HTTP_400_BAD_REQUEST)
-            
-           
-            orderdetails = OrderItems.objects.filter(user_id=seller, order_status=order_status, is_active=True)
-            
-           
-            data = []
-            for order in orderdetails:
-                data.append({
-                    'consumer_id': order.user_id,
-                    'product_id': order.product_id,
-                    'variation_id': getattr(order, 'variation_id', None), 
-                    'quantity': order.quantity,
-                    'price': order.price,
-                    'delivered_location': order.delivered_location if order.order_status == 'delivered' else None,
-                    'delivered_time': order.delivered_time if order.order_status == 'delivered' else None
-                })
-            
-            return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
-               
     def put(self,request):
 
         roles = get_user_roles(request)
@@ -1109,24 +1070,41 @@ class ProductMasterView(APIView):
 
 class BuyerOrderDetailsAPI(APIView):
     serializer_class=OrderItemsSerializer
-    def get(self,request):
-        order_status=request.GET.get('status')
-        roles = get_user_roles(request)
-        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-        iu_id = get_iuobj(current_site)
-        if not iu_id:
-            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
-        fields=['id','product','quantity','price','order_status']
-
-        if roles!='consumer':
-            return Response({"status":"error","message":"Unauthorized  user"},status=status.HTTP_400_BAD_REQUEST)
-        if order_status in ['order_confirmed','rejected']:
-            order_details=OrderItems.objects.filter(user_id=request.user.id,is_active=True,iu_id=iu_id,order_status=order_status)
-            serializer=self.serializer_class(order_details,fields=fields,many=True)        
-        else:
-            order_details=OrderItems.objects.filter(user_id=request.user.id,is_active=True,iu_id=iu_id)
-            serializer=self.serializer_class(order_details,many=True,fields=fields)
-        return Response({"status": "success","message":"Order details","data": serializer.data}, status=status.HTTP_200_OK)        
+    def get(self, request):
+        try:
+            role = get_user_roles(request)
+            if role != 'consumer':
+                return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
+            
+            consumer= request.user.id
+            
+            order_status = request.query_params.get('order_status')  
+           
+            allowed_statuses = ['order_confirmed','cancelled','pending', 'delivered', 'shipping','return']
+            
+            if order_status not in allowed_statuses:
+                return Response({"status": "error", "message": "Invalid order status"}, status=status.HTTP_400_BAD_REQUEST)
+           
+            orderdetails = OrderItems.objects.filter(user_id=consumer,order_status=order_status, is_active=True)
+            
+           
+            data = []
+            for order in orderdetails:
+                data.append({
+                    'consumer_id': order.user_id,
+                    'product_id': order.product_id,
+                    'variation_id': getattr(order, 'variation_id', None), 
+                    'quantity': order.quantity,
+                    'price': order.price,
+                    'delivered_location': order.delivered_location if order.order_status == 'delivered' else None,
+                    'delivered_time': order.delivered_time if order.order_status == 'delivered' else None
+                })
+            
+            return Response({"status": "success", "data": data}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+                 
 
 
 class UploadImagesAPI(APIView):

@@ -118,9 +118,8 @@ class ProductVariationSerializer(serializers.ModelSerializer):
         product_master_details= ProductMasterSerializer(instance.product).data
         data['product_master']={field:product_master_details[field] for field in ['id','name','body_content','description']}
     
-        
-        # variation_details=VariantOptionSerializer(instance.variation).data
-        # data['variation_details']={field:variation_details[field] for field in['id','name', 'description']}
+        variation_details=VariantOptionSerializer(instance.variation).data
+        data['variation_details']={field:variation_details[field] for field in['id','name', 'description']}
         return data
     
     
