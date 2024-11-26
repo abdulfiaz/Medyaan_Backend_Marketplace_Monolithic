@@ -20,6 +20,7 @@ from django.utils import timezone
 from sdd_marketplace import settings
 import boto3
 from botocore.config import Config
+from django.db.models import Count
 
 class CategoryMasterAPI(APIView):
     serializer_class = Categoryserializer
@@ -1744,27 +1745,74 @@ class CartItemAPI(APIView):
         except Exception as e:
             return Response({"status":"error","message":str(e)},status=status.HTTP_400_BAD_REQUEST)
         
-class FeedbackAPI(APIView):
-    
+class FeedbackAPI(APIView):   
     serializerclass=FeedbackSerializer
-    
-    def get(self,request):
+
+    def get(self, request):
         if not request.user:
-            return Response({"status":"error","message":"Token not found"},status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status": "error", "message": "Token not found"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            domain = request.META.get('HTTTP_ORIGIN',settings.APPLICATION_HOST)
+            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
             iu_id = get_iuobj(domain)
-            try:
-                product_id=request.query_params.get('product_id')
-                feedback=FeedbackDetails.objects.filter(is_active=True,iu_id=iu_id,product=product_id)
-                feedbackserializer=self.serializerclass(feedback,many=True,fields=['id','product','comments','ratings','images','like_count','dislike_count'])
-                return Response({"status":"Success","message":"feedback details","data":feedbackserializer.data},status=status.HTTP_200_OK)
-            
-            except FeedbackDetails.DoesNotExist:
-                    return Response({"status":"error","message":"feedback id not found"},status=status.HTTP_400_BAD_REQUEST)
+            if not iu_id:
+                return Response({"status": "error", "message": "Invalid IU object"}, status=status.HTTP_400_BAD_REQUEST)
+
+            product_id = request.query_params.get('product_id')
+            if not product_id:
+                return Response({"status": "error", "message": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+            feedbacks = FeedbackDetails.objects.filter(is_active=True, iu_id=iu_id, product=product_id).order_by('-ratings')
+
+            if not feedbacks.exists():
+                return Response({"status": "error", "message": "No feedback found for the product"}, status=status.HTTP_404_NOT_FOUND)
+            product=ProductVariation.objects.get(id=product_id,iu_id=iu_id,is_active=True)
+            variation = product.variation
+
+            product_details = {
+                "product ID": product.product.id,
+                "product Name": product.product.name,
+                "variation ID": variation.id if variation else None,
+                "variation Name": variation.name if variation else None
+            }
+            #average rating
+            total_rating = sum(feedback.ratings for feedback in feedbacks)
+            average_rating = total_rating / feedbacks.count() if feedbacks.count() > 0 else 0
+            #rating count
+            rating_counts = feedbacks.values('ratings').annotate(count=Count('ratings')).order_by('-ratings')
+            rating_distribution = {entry['ratings']: entry['count'] for entry in rating_counts}
+
+            common_fields = {
+                "Product Variant": {
+                    "product_varient_id": product.id if product else None,
+                    "selling_price": product.selling_price if product else None,
+                    "total_price": product.total_price if product else None,
+                    "stock": product.stock if product else None,
+                    "image": product.image.url if product and product.image else None
+                }
+            }
+
+            fields = ['id', 'comments', 'ratings', 'images','likes','dislikes']
+            feedback_serializer = FeedbackSerializer(feedbacks, many=True,fields=fields)
+            product_detail={**product_details, **common_fields}
+    
+            return Response(
+                {
+                    "status": "success",
+                    "message": "Feedback details retrieved",
+                    "product_details": product_detail,
+                    "feedback_details": feedback_serializer.data,
+                    "average_rating": round(average_rating, 1),
+                    "rating_distribution": rating_distribution,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except FeedbackDetails.DoesNotExist:
+            return Response({"status": "error", "message": "Feedback not found"}, status=status.HTTP_404_NOT_FOUND)
+
         except Exception as e:
-            return Response({"status": "error","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-       
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    
     def post(self,request):
         role_name = get_user_roles(request)
         if not role_name in ['consumer']:

@@ -422,11 +422,42 @@ class CartItemSerializer(serializers.ModelSerializer):
         
         return data
 
-class FeedbackSerializer(serializers.ModelSerializer):
-    class Meta:
-        model=FeedbackDetails
-        fields='__all__'
+# class FeedbackSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model=FeedbackDetails
+#         fields='__all__'
         
+#     def __init__(self, *args, **kwargs):
+#         fields = kwargs.pop('fields', None)
+#         super(FeedbackSerializer, self).__init__(*args, **kwargs)
+
+#         if fields is not None:
+#             allowed = set(fields)
+#             existing = set(self.fields)
+#             for field_name in existing - allowed:
+#                 self.fields.pop(field_name)
+    
+#     def to_representation(self, instance):
+#         data = super().to_representation(instance)
+        
+#         product_variant_data = ProductVariationSerializer(instance.product).data
+#         data['product_variant'] = {field: product_variant_data[field] for field in ['id', 'selling_price', 'total_price', 'stock', 'image']}
+
+
+class FeedbackSerializer(serializers.ModelSerializer):
+    likes = serializers.SerializerMethodField()
+    dislikes = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FeedbackDetails
+        fields='__all__'
+
+    def get_likes(self, obj):
+        return obj.likes.count()
+
+    def get_dislikes(self, obj):
+        return obj.dislikes.count()
+    
     def __init__(self, *args, **kwargs):
         fields = kwargs.pop('fields', None)
         super(FeedbackSerializer, self).__init__(*args, **kwargs)
@@ -436,10 +467,19 @@ class FeedbackSerializer(serializers.ModelSerializer):
             existing = set(self.fields)
             for field_name in existing - allowed:
                 self.fields.pop(field_name)
-    
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
+
+    # def to_representation(self, instance):
+    #     data = super().to_representation(instance)
+
+    #     product = instance.product
+    #     if product:
+    #         product_variant_data = ProductVariationSerializer(product).data
+    #         data['product_variant'] = {
+    #             field: product_variant_data.get(field)
+    #             for field in ['id', 'selling_price', 'total_price', 'stock', 'image']
+    #         }
         
-        product_variant_data = ProductVariationSerializer(instance.product).data
-        data['product_variant'] = {field: product_variant_data[field] for field in ['id', 'selling_price', 'total_price', 'stock', 'image']}
-    
+    #     else:
+    #         data['product_variant'] = None
+
+    #     return data
