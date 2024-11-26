@@ -108,7 +108,7 @@ class OrderItems(BaseModel):
     order=models.ForeignKey(OrderDetails, related_name='OrderItems_order',on_delete=models.CASCADE)
     product=models.ForeignKey(ProductVariation,related_name='OrderItems_product',on_delete=models.CASCADE)
     variation=models.ForeignKey(VariantOption,related_name='OrderItems_variation',on_delete=models.CASCADE)
-    seller=models.ForeignKey(SellerProfile,related_name='OrderItems_seller',on_delete=models.CASCADE)
+    seller=models.ForeignKey(CustomUser,related_name='OrderItems_seller',on_delete=models.CASCADE,null=True,blank=True)
     quantity=models.IntegerField(null=True,blank=True)
     price=models.DecimalField(max_digits=10,null=True,blank=True,default=0,decimal_places=3)
     order_status=models.CharField(max_length=50,default="pending")
