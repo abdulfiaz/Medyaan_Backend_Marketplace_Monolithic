@@ -26,8 +26,9 @@ class SellerProfile(BaseModel):
     pan_number=models.CharField(unique=True,max_length=15)#pan number for seller
     account_number=models.CharField(max_length=30)#bank account number
     ifsc_number=models.CharField(max_length=15)#ifsc number
-    return_amount=models.DecimalField(max_digits=10,decimal_places=5,null=True,blank=True)
+    return_amount=models.DecimalField(max_digits=10,decimal_places=3,null=True,blank=True)
     iu_id=models.ForeignKey(IUMaster,related_name='SellerProfile_iu_id',on_delete=models.CASCADE)
+    updated_profile=JSONField(default=dict,null=True,blank=True)
 
     class Meta:
         db_table = 'seller_profile'

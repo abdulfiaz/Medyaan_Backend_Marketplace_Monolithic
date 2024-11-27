@@ -13,7 +13,7 @@ class SellerApplicationDetailsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model=SellerApplicationDetails
-        fields=['id','user','details','application_status','is_rejected','reason','iu_id']
+        fields=['id','user','details','application_status','is_rejected','reason','iu_id','updated_data']
     def __init__(self, *args, **kwargs):
         fields = kwargs.pop('fields', None)
         super().__init__(*args, **kwargs)

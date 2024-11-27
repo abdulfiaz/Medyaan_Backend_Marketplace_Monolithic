@@ -154,14 +154,16 @@ class SellerApplicationDetailsAPI(APIView):
         except SellerApplicationDetails.DoesNotExist:
             return Response({"status": "error", "message": "Application not found"}, status=status.HTTP_404_NOT_FOUND)
             
-        updated_data = request.data        
-        if "bussiness_name" in updated_data:
-            return Response({"status": "error", "message": "You cannot update the bussiness name."}, status=status.HTTP_403_FORBIDDEN)
-        
-        non_empty_data = {key: value for key, value in updated_data.items() if value not in ["", None]}
+        data = request.data        
+        non_empty_data = {key: value for key, value in data.items() if value not in ["", None]}
 
         if not non_empty_data:
             return Response({"status": "error", "message": "field is empty."}, status=status.HTTP_403_FORBIDDEN)
+        updated_data = application.updated_data or {}  # Fetch existing updated_data
+        updated_data.update(non_empty_data)  # Merge new changes
+        application.updated_data = updated_data
+        application.save(update_fields=['updated_data'])
+            # return Response({"status": "success", "message": "Changes saved in updated_data."}, status=status.HTTP_200_OK)
         serializer = self.serializer_class(application, data=non_empty_data, partial=True)
         if serializer.is_valid():
             serializer.save(modified_by=request.user.id)
