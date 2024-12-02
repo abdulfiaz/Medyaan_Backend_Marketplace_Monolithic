@@ -199,13 +199,15 @@ class CartItem(BaseModel):
 
 class FeedbackDetails(BaseModel):
     user=models.ForeignKey(CustomUser,on_delete=models.CASCADE,related_name = 'feedbackdetails_user')
-    product=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,related_name = 'feedbackdetails_product')
+    product_master=models.ForeignKey(ProductMaster,on_delete=models.CASCADE,related_name='product_feedback_details',null=True,blank=True)
+    product_varient=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,related_name='productvariant_feedback',null=True,blank=True)
+    # product=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,related_name = 'feedbackdetails_product')
     comments=models.TextField(blank=True,null=True)
     ratings=models.IntegerField(default=1)
     images=ArrayField(models.TextField(),blank=True,null=True)#image for each product
     likes=models.ManyToManyField(CustomUser,related_name='feedbackdetails_likes',blank=True)
     dislikes=models.ManyToManyField(CustomUser,related_name='feedbackdetails_dislikes',blank=True)
-    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)    
+    iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)  
 
     class Meta:
         db_table="feedback_details"
