@@ -20,7 +20,7 @@ from django.utils import timezone
 from sdd_marketplace import settings
 import boto3
 from botocore.config import Config
-from django.db.models import Count
+from django.db.models import Count,Avg
 
 class CategoryMasterAPI(APIView):
     serializer_class = Categoryserializer
@@ -1536,60 +1536,88 @@ class OrderTypeAPI(APIView):
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
 
-class ProductFetchAPI(APIView):
-    
+class ProductFetchAPI(APIView):    
     def get(self, request):
-        try:
-            domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
-            iu_id = get_iuobj(domain)
-            
-            start_count = int(request.query_params.get('startcount',0))
-            end_count = int(request.query_params.get('endcount',10))
-            product_name = request.query_params.get("name", None)
-            product_type = request.query_params.get("type", None)
-            variant_id = request.query_params.get("variant_id", None)
-            id = request.query_params.get("id", None)
-            min_price = request.query_params.get("min_price", None)
-            max_price = request.query_params.get("max_price", None)
+        domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(domain)
 
-            products_master = None
+        product_name = request.query_params.get("name", None)
+        product_type = request.query_params.get("type", None)
+        variant_id = request.query_params.get("variant_id", None)
+        id = request.query_params.get("id", None)
+        min_price = request.query_params.get("min_price", None)
+        max_price = request.query_params.get("max_price", None)
+        rating = request.query_params.get("rating", None)
 
-            if product_type == PRODUCT and id:
-                products_master = ProductMaster.objects.filter(pk=id, iu_id=iu_id, is_active=True)
+        products_master = None
 
-            elif product_name:
-                products_master = ProductMaster.objects.filter(name__istartswith=product_name, iu_id=iu_id, is_active=True)
+        if product_type == PRODUCT and id:
+            products_master = ProductMaster.objects.filter(id=id, iu_id=iu_id, is_active=True).first()
+        elif product_name:
+            products_master = ProductMaster.objects.filter(name__istartswith=product_name, iu_id=iu_id, is_active=True).first()
 
-            if not products_master:
-                return Response({"status": "success", "message": "No products found", "data": []})
-            
-            product_ids = products_master.values_list('id', flat=True)
-            products = ProductVariation.objects.filter(product_id__in=product_ids, iu_id=iu_id, is_active=True)
+        if not products_master:
+            return Response({"status": "success", "message": "No products found", "data": []}, status=status.HTTP_200_OK)
 
-            variant = None
-            if variant_id:
-                try:
-                    variant = VariantOption.objects.get(pk=variant_id, iu_id=iu_id, is_active=True)
-                    products = products.filter(variation=variant)
-                except VariantOption.DoesNotExist:
-                    return Response({"status": "failed", "message": "Invalid variant ID."}, status=status.HTTP_400_BAD_REQUEST)                
-            
-            if min_price:
-                products = products.filter(selling_price__gte=min_price)
-            if max_price:
-                products = products.filter(selling_price__lte=max_price)
+        feedbacks = FeedbackDetails.objects.filter(product__product=products_master, is_active=True, iu_id=iu_id)
+        total_rating = sum(feedback.ratings for feedback in feedbacks)
+        feedback_count = feedbacks.count()
+        average_rating = total_rating / feedback_count if feedback_count > 0 else 0
+        user_count = feedbacks.values('user').distinct().count()
+        
+        if rating and average_rating < float(rating):
+            return Response({"status": "success", "message": "No products found", "data": []}, status=status.HTTP_200_OK)
+        products = ProductVariation.objects.filter(product_id=products_master.id, iu_id=iu_id, is_active=True)
 
-            if not products.exists():
-                return Response({"status": "success", "message": "No products found", "data": []})
-            products = products[start_count:end_count+1]
+        if variant_id:
+            try:
+                variant = VariantOption.objects.get(pk=variant_id, iu_id=iu_id, is_active=True)
+                products = products.filter(variation=variant)
+            except VariantOption.DoesNotExist:
+                return Response({"status": "failed", "message": "Invalid variant ID."}, status=status.HTTP_400_BAD_REQUEST)
 
-            serializer = ProductVariationSerializer(products, many=True)
-            return Response({"status": "success","message": "Data successfully retrieved","data": serializer.data,"count": products.count(),},status=status.HTTP_200_OK,)
+        if min_price:
+            products = products.filter(selling_price__gte=min_price)
+        if max_price:
+            products = products.filter(selling_price__lte=max_price)
 
-        except Exception as e:
-            return Response({"status": "failed", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+        product_data = []
 
+        product_data = []
+
+        for product in products:
+            variant_feedbacks = FeedbackDetails.objects.filter(product=product, is_active=True, iu_id=iu_id)
+            total_variant_rating = sum(feedback.ratings for feedback in variant_feedbacks)
+            variant_feedback_count = variant_feedbacks.count()
+            variant_average_rating = total_variant_rating / variant_feedback_count if variant_feedback_count > 0 else 0
+            variant_user_count = variant_feedbacks.values('user').distinct().count()
+
+            product_data.append({
+                "variation_id": product.id,
+                "variation_name": product.variation.name if product.variation else None,
+                "total_price": product.total_price,
+                "selling_price": product.selling_price,
+                "stock": product.stock,
+                "average_variant_rating": variant_average_rating,  
+                "productvarient_user_count": variant_user_count,       
+            })
+
+
+        if not product_data:
+            return Response({"status": "success", "message": "No products found", "data": []}, status=status.HTTP_200_OK)
+
+        response_data = {
+            "product_id": products_master.id,
+            "product_name": products_master.name,
+            "body_content": products_master.body_content,
+            "description": products_master.description,
+            "average_product_rating": average_rating,  
+            "total_user_count": user_count,        
+            "variations": product_data,
+            "total_productvariant_count": len(product_data)
+        }
+
+        return Response({"status": "success","message": "Data successfully retrieved","data": response_data}, status=status.HTTP_200_OK)
 
 
 class WishListAPI(APIView):
@@ -1747,72 +1775,57 @@ class CartItemAPI(APIView):
         
 class FeedbackAPI(APIView):   
     serializerclass=FeedbackSerializer
-
     def get(self, request):
-        if not request.user:
-            return Response({"status": "error", "message": "Token not found"}, status=status.HTTP_400_BAD_REQUEST)
-
         try:
             domain = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
             iu_id = get_iuobj(domain)
             if not iu_id:
                 return Response({"status": "error", "message": "Invalid IU object"}, status=status.HTTP_400_BAD_REQUEST)
 
+
             product_id = request.query_params.get('product_id')
             if not product_id:
                 return Response({"status": "error", "message": "Product ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-            feedbacks = FeedbackDetails.objects.filter(is_active=True, iu_id=iu_id, product=product_id).order_by('-ratings')
 
-            if not feedbacks.exists():
-                return Response({"status": "error", "message": "No feedback found for the product"}, status=status.HTTP_404_NOT_FOUND)
-            product=ProductVariation.objects.get(id=product_id,iu_id=iu_id,is_active=True)
-            variation = product.variation
+            product_master = ProductMaster.objects.get(id=product_id, iu_id=iu_id, is_active=True)
 
-            product_details = {
-                "product ID": product.product.id,
-                "product Name": product.product.name,
-                "variation ID": variation.id if variation else None,
-                "variation Name": variation.name if variation else None
-            }
-            #average rating
-            total_rating = sum(feedback.ratings for feedback in feedbacks)
-            average_rating = total_rating / feedbacks.count() if feedbacks.count() > 0 else 0
-            #rating count
+            if not product_master:
+                return Response({"status": "error", "message": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            feedbacks = FeedbackDetails.objects.filter(is_active=True, iu_id=iu_id, product_master=product_master).select_related('product_varient__variation').order_by('-ratings')
+
+
+            overall_rating = feedbacks.aggregate(average_rating=Avg('ratings'))['average_rating'] or 0
+            feedback_count = feedbacks.count()
+            user_count = feedbacks.values('user').distinct().count()
+
             rating_counts = feedbacks.values('ratings').annotate(count=Count('ratings')).order_by('-ratings')
             rating_distribution = {entry['ratings']: entry['count'] for entry in rating_counts}
 
-            common_fields = {
-                "Product Variant": {
-                    "product_varient_id": product.id if product else None,
-                    "selling_price": product.selling_price if product else None,
-                    "total_price": product.total_price if product else None,
-                    "stock": product.stock if product else None,
-                    "image": product.image.url if product and product.image else None
-                }
+            feedback_serializer = FeedbackSerializer(feedbacks, many=True)
+            product_details = {
+                "product_id": product_master.id,
+                "product_name": product_master.name,
             }
 
-            fields = ['id', 'comments', 'ratings', 'images','likes','dislikes']
-            feedback_serializer = FeedbackSerializer(feedbacks, many=True,fields=fields)
-            product_detail={**product_details, **common_fields}
-    
             return Response(
                 {
                     "status": "success",
                     "message": "Feedback details retrieved",
-                    "product_details": product_detail,
+                    "product_details": product_details,
                     "feedback_details": feedback_serializer.data,
-                    "average_rating": round(average_rating, 1),
+                    "average_rating": round(overall_rating, 1),
                     "rating_distribution": rating_distribution,
+                    "feedback_count": feedback_count,
+                    "user_count": user_count,
                 },
-                status=status.HTTP_200_OK,
+                status=status.HTTP_200_OK
             )
-
-        except FeedbackDetails.DoesNotExist:
-            return Response({"status": "error", "message": "Feedback not found"}, status=status.HTTP_404_NOT_FOUND)
 
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    
+
+   
     def post(self,request):
         role_name = get_user_roles(request)
         if not role_name in ['consumer']:
@@ -1828,7 +1841,8 @@ class FeedbackAPI(APIView):
                 data['user']=user.id
                 data['iu_id']=iu_id.id
                 data['created_by']=user.id
-                order_items=OrderItems.objects.get(iu_id=iu_id,product=data['product'],order_status=ORDER_CONFIRMED,user=user)
+                order_items=OrderItems.objects.get(iu_id=iu_id.id,product=data['product_varient'],order_status=ORDER_CONFIRMED,user=user)
+                data['product_master']=order_items.product.product.id
                 feedback=self.serializerclass(data=data)
                 if not feedback.is_valid():
                     return Response({"status":"error","message":feedback.errors},status=status.HTTP_400_BAD_REQUEST)
@@ -1867,7 +1881,7 @@ class FeedbackAPI(APIView):
                         feedback.dislikes.add(user)
                         
                     feedback.save()    
-                    print(feedback.dislikes)
+                    # print(feedback.dislikes)
                     return Response({"status":"success","message":f"{likes if likes else dislikes} the feedback successfully"},status=status.HTTP_200_OK) 
                     
                 except FeedbackDetails.DoesNotExist:
@@ -1875,7 +1889,6 @@ class FeedbackAPI(APIView):
         except Exception as e:
             return Response({"status": "error","message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
-
 class InvoiceModelAPI(APIView):   
     def get(self, request):
         if not request.user:

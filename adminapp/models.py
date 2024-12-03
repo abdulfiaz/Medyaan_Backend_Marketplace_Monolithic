@@ -12,7 +12,7 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
-  
+    @property
     def created_at_timestamp(self):
         return round(self.created_at.timestamp())
         

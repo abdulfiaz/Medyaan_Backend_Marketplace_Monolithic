@@ -1,6 +1,6 @@
 from rest_framework.views import APIView,status
 from rest_framework.response import Response
-from.models import SellerApplicationDetails
+from.models import SellerApplicationDetails, SellerProfile
 from .serializers import SellerApplicationDetailsSerializer,SellerProfileSerializer
 from adminapp.iudetail import *
 from adminapp.models import IUJsonMaster
@@ -34,6 +34,11 @@ class SellerApplicationDetailsAPI(APIView):
 
         elif roles == "manager":
             fields=['id','user','application_status','details']
+            total_counts = {
+                "pending": SellerApplicationDetails.objects.filter(application_status="pending", is_active=True,iu_id=iu_id).count(),
+                "approved": SellerApplicationDetails.objects.filter(application_status="approved", is_active=True,iu_id=iu_id).count(),
+                "rejected": SellerApplicationDetails.objects.filter(application_status="rejected", is_active=True,iu_id=iu_id).count(),
+                }
             if application_status:   
                 if id:
                 
@@ -46,11 +51,11 @@ class SellerApplicationDetailsAPI(APIView):
                     pending_applications = SellerApplicationDetails.objects.filter(is_active=True,application_status=application_status,iu_id=iu_id)
                     serializer = self.serializer_class(pending_applications, many=True,fields=fields)
                     
-                return Response({"status": "success", "message":"seller pending details","data": serializer.data}, status=status.HTTP_200_OK)
+                return Response({"status": "success", "message":"seller pending details","data": serializer.data,"over_all_count":total_counts}, status=status.HTTP_200_OK)
             else:
                 pending_applications = SellerApplicationDetails.objects.filter(is_active=True)
                 serializer = self.serializer_class(pending_applications, many=True)                 
-                return Response({"status": "success", "data": serializer.data}, status=status.HTTP_200_OK)
+                return Response({"status": "success", "data": serializer.data,"over_all_count":total_counts}, status=status.HTTP_200_OK)
         return Response({"status": "error", "message": "Permission denied"}, status=status.HTTP_401_UNAUTHORIZED)
 
         
@@ -159,11 +164,6 @@ class SellerApplicationDetailsAPI(APIView):
 
         if not non_empty_data:
             return Response({"status": "error", "message": "field is empty."}, status=status.HTTP_403_FORBIDDEN)
-        updated_data = application.updated_data or {}  # Fetch existing updated_data
-        updated_data.update(non_empty_data)  # Merge new changes
-        application.updated_data = updated_data
-        application.save(update_fields=['updated_data'])
-            # return Response({"status": "success", "message": "Changes saved in updated_data."}, status=status.HTTP_200_OK)
         serializer = self.serializer_class(application, data=non_empty_data, partial=True)
         if serializer.is_valid():
             serializer.save(modified_by=request.user.id)
@@ -419,4 +419,145 @@ class ManagerApprovalView(APIView):
             return Response({"status": "error", "message": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
     
 
+class ManagerApproveUpdateAPI(APIView):
+    Serializer_class=SellerProfileSerializer
+    def get(self, request):
+        id = request.query_params.get('id')
+        roles = get_user_roles(request)
+        
+        if roles != 'manager':
+            return Response({"status": "error", "message": "Unauthorized User"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        fields = ['id', 'user', 'seller_application_id', 'bussiness_name', 'address', 'email', 'mobile_number', 
+                'gst_number', 'pan_number', 'account_number', 'ifsc_number']
+        
+        if id:
+            try:
+                seller_profile = SellerProfile.objects.filter(id=id, iu_id=iu_id, is_active=True).exclude(updated_profile={}).first()
+            except SellerProfile.DoesNotExist:
+                return Response({"status": "error", "message": "Seller profile not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+            if seller_profile:
+                new_data = seller_profile.updated_profile
+                serializer = self.Serializer_class(seller_profile, fields=fields)
+                response_data = {
+                    "old_data": serializer.data,
+                    "new_data": new_data,
+                }
+                return Response({"status": "success", "message": "Seller updated profile details", "data": response_data}, 
+                                status=status.HTTP_200_OK)
+            else:
+                return Response({"status": "error", "message": "No updated profile details found for this seller"}, 
+                                status=status.HTTP_400_BAD_REQUEST)
+        else:
+            seller_details = SellerProfile.objects.filter(iu_id=iu_id, is_active=True).exclude(updated_profile={})
+            response_data = []
+            
+            for seller in seller_details:
+                old_data = self.Serializer_class(seller, fields=fields).data
+                new_data = seller.updated_profile if seller.updated_profile else None
+                response_data.append({
+                    "old_data": old_data,
+                    "new_data": new_data,
+                })
+            
+            if not response_data:
+                return Response({"status": "error", "message": "No seller profiles found"}, status=status.HTTP_404_NOT_FOUND)
+            
+            return Response({"status": "success", "message": "Seller profile details fetched", "data": response_data}, 
+                            status=status.HTTP_200_OK)
+    def put(self,request):
+        id=request.data.get('id')
+        action=request.data.get('action')
+        user_role = get_user_roles(request)
+        if user_role != "manager":
+            return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_404_NOT_FOUND)
+        
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND) 
+        seller_profile=SellerProfile.objects.get(id=id,iu_id=iu_id,is_active=True)
+        if not seller_profile.updated_profile:
+            return Response({"status":"error","message":"seller has no updated profile"},status=status.HTTP_400_BAD_REQUEST)
+        
+        if action=='approved':
+            for key,value in seller_profile.updated_profile.items():
+                setattr(seller_profile,key,value)
+            seller_profile.updated_profile={}
+            seller_profile.modified_by=request.user.id
+            seller_profile.save()
+            return Response({"status":"success","message":"Seller Profile details is updated successful"},status=status.HTTP_200_OK)
+        elif action =='rejected':
+            seller_profile.updated_profile={}
+            seller_profile.modified_by=request.user.id
+            seller_profile.save()
+            return Response({"status":"success","message":"Seller Profile details is rejected"},status=status.HTTP_200_OK)
+        else:
+            return Response({"status":"error","message":"Invalid action"},status=status.HTTP_400_BAD_REQUEST)
+ 
+class SellerUpdateProfileAPI(APIView):
+    def put(self, request):
+        id=request.data.get('id')
+        user_role = get_user_roles(request)
+        if user_role != "seller":
+            return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_404_NOT_FOUND)
+        
+        current_site = request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST)
+        iu_id = get_iuobj(current_site)
+        if not iu_id:
+            return Response({'status': 'error', 'message': 'IU domain not found.'}, status=status.HTTP_404_NOT_FOUND)    
+        updated_data = request.data
+        updated_data.pop('id', None)
+        non_empty_data = {key: value for key, value in updated_data.items() if value not in ["", None]}
+        if not non_empty_data:
+            return Response({"status": "error", "message": "field is empty."}, status=status.HTTP_403_FORBIDDEN)
     
+        seller_profile=SellerProfile.objects.get(id=id,iu_id=iu_id,is_active=True)
+        seller_profile.updated_profile=non_empty_data
+        seller_profile.modified_by=request.user.id
+        seller_profile.save()
+        try:
+            template = TemplateMaster.objects.get(template_name="seller_update_profile")
+        except TemplateMaster.DoesNotExist:
+            return Response({"status": "error", "message": "Template not found"}, status=status.HTTP_400_BAD_REQUEST)
+        manager_role = RoleMaster.objects.filter(name='manager').first()
+        if not manager_role:
+            return Response({"status": "error", "message": "Manager role not found"}, status=status.HTTP_400_BAD_REQUEST)
+        event= EventMaster.objects.get(name=template.template_name,iu_id=iu_id)
+        
+        event_id=event.id
+        role=event.role
+        subject="Seller Update the Profile"
+        message="A seller has been update the profile details. Please review the details below."
+        notification_message = template.content.format(seller_profile.id)
+        email_context = {
+            "subject": subject,
+            "message": message,
+            "details": notification_message, 
+        }
+        email_content = render_to_string('email/seller_update_notification.html', email_context)
+        manager_ids = RoleMapping.objects.filter(role=manager_role).values_list('user_id', flat=True)
+        managers = CustomUser.objects.filter(id__in=manager_ids)
+        sender_id = request.user.id
+        for manager in managers:
+            notification = overallnotification(
+                sender_id=sender_id,
+                receiver_id=manager.id,
+                event=event_id, 
+                subject=subject,
+                message=message,
+                notification_message=notification_message,
+                email_content=email_content,
+                iu_id=iu_id.id,
+                request_user=request.user.id,
+                role=role,
+                email_id=manager.email
+    
+            )
+            return Response({"status": "success", "message": "updated profile details is send to manager."}, status=status.HTTP_200_OK)

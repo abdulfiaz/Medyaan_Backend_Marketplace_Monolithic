@@ -63,7 +63,7 @@ class VariantOption(BaseModel):
     variation=models.ForeignKey(VariantMaster,on_delete=models.CASCADE,related_name='Variantoption_variation')#refer the variation table for type
     name=models.CharField(max_length=200,null=True,blank=True)
     description=models.CharField(max_length=300,null=True,blank=True)
-    image=ArrayField(models.TextField(),blank=True,null=True)
+    # image=ArrayField(models.TextField(),blank=True,null=True)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
 
     class Meta:
@@ -190,7 +190,7 @@ class CartItem(BaseModel):
     product_variant=models.ForeignKey(ProductVariation,on_delete=models.CASCADE,blank=True,null=True,related_name = 'cartitem_product_variant')
     Product=models.ForeignKey(ProductMaster,on_delete=models.CASCADE,related_name = 'cartitem_user_product')
     quantity=models.IntegerField(default=1)  # quantity of item add to cart
-    is_removed=models.BooleanField(default=False) # boolean field to cart product is removed or not
+    # is_removed=models.BooleanField(default=False) # boolean field to cart product is removed or not
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
 
     class Meta:

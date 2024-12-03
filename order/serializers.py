@@ -447,10 +447,19 @@ class CartItemSerializer(serializers.ModelSerializer):
 class FeedbackSerializer(serializers.ModelSerializer):
     likes = serializers.SerializerMethodField()
     dislikes = serializers.SerializerMethodField()
-
+    product_variant= serializers.SerializerMethodField()
     class Meta:
         model = FeedbackDetails
-        fields='__all__'
+        # fields='__all__'
+        fields = ['id', 'comments', 'images', 'likes', 'dislikes','product_variant']
+
+    def get_product_variant(self, obj):
+        
+        return {
+            "variant_id": obj.product_varient.id,
+            "variant_name": obj.product_varient.variation.name,
+            "rating":obj.ratings
+        }
 
     def get_likes(self, obj):
         return obj.likes.count()
