@@ -48,7 +48,6 @@ class ProductMaster(BaseModel):
 
 class VariantMaster(BaseModel):
     """store the type of variant for the products"""
-    category=models.ForeignKey(ProductCategoryMaster,on_delete=models.CASCADE,related_name='VariantMaster_category')#refer the categorymaster table
     name=models.CharField(max_length=200,null=True,blank=True)#varient type name
     description=models.CharField(max_length=300,null=True,blank=True)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
@@ -63,7 +62,6 @@ class VariantOption(BaseModel):
     variation=models.ForeignKey(VariantMaster,on_delete=models.CASCADE,related_name='Variantoption_variation')#refer the variation table for type
     name=models.CharField(max_length=200,null=True,blank=True)
     description=models.CharField(max_length=300,null=True,blank=True)
-    # image=ArrayField(models.TextField(),blank=True,null=True)
     iu_id=models.ForeignKey(IUMaster,on_delete=models.CASCADE)
 
     class Meta:

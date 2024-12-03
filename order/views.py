@@ -1,4 +1,14 @@
 from decimal import Decimal
+from io import BytesIO
+from openpyxl.styles import PatternFill
+from django.http import HttpResponse
+from openpyxl.chart import PieChart, Reference
+from openpyxl.styles import Font,Alignment
+from openpyxl.chart.label import DataLabelList
+from openpyxl.utils import get_column_letter
+from django.utils import timezone
+from openpyxl import Workbook
+from datetime import datetime
 from django.conf import settings
 from adminapp.iudetail import get_iuobj
 from users.auth import get_user_roles
@@ -21,6 +31,7 @@ from sdd_marketplace import settings
 import boto3
 from botocore.config import Config
 from django.db.models import Count,Avg
+from order.getprofile import get_photo
 
 class CategoryMasterAPI(APIView):
     serializer_class = Categoryserializer
@@ -171,7 +182,7 @@ class VariantMasterAPI(APIView):
             seller_id=request.user.id
             variant_id = request.query_params.get('variant_id')
 
-            fields=['id','category','name','description']
+            fields=['id','name','description']
 
             variant_data=[]
             
@@ -200,18 +211,12 @@ class VariantMasterAPI(APIView):
         data = request.data
         data['iu_id'] = iu_id.id
 
-        sub_category_id = request.data.get('sub_category_id')
-        category= get_object_or_404(ProductCategoryMaster, id=sub_category_id,is_active=True,iu_id=iu_id)
-        if not category.is_sub_category():
-            return Response({"status": "error", "message": "Provided ID is not a subcategory"},status=status.HTTP_400_BAD_REQUEST,)
-
        
-        existing =VariantMaster.objects.filter(category_id=sub_category_id,name__iexact=data.get('name'),is_active=True,iu_id=iu_id).exists()
+        existing =VariantMaster.objects.filter(name__iexact=data.get('name'),is_active=True,iu_id=iu_id).exists()
         if existing:
-            return Response({"status":"error","message":"variant with this category already exists"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"status":"error","message":"variant with this name already exists"}, status=status.HTTP_400_BAD_REQUEST)
         data['created_by'] = request.user.id
-        data['category'] = category.id 
-
+       
        
         variantmaster_serializer = self.serializer_class(data=data)
 
@@ -812,7 +817,7 @@ class ManagerdetailsAPI(APIView):
 
 class BuyerView(APIView):
     serializer_class=ProductVariationSerializer
-    
+   
     def fetch_variants(self,product_id,iu_id):
         return [
             {
@@ -826,40 +831,51 @@ class BuyerView(APIView):
             for variant in ProductVariation.objects.filter(product=product_id, is_active=True, iu_id=iu_id)
             if (variation_option := VariantOption.objects.filter(id=variant.variation_id, iu_id=iu_id).first())
         ]
-
+    
     def get(self, request):
         try:
-        
-            if get_user_roles(request) != 'consumer':
-                return Response({"status": "error", "message": "Unauthorized user"}, status=status.HTTP_401_UNAUTHORIZED)
-
-            iu_id = get_iuobj(request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST))
-
-            product_id = request.query_params.get('product_id')
+            user_role= None
+            try:
+                user_role= get_user_roles(request)
+            except Exception as e:
+                user_role= None
+            iu_id = get_iuobj(request.META.get("HTTP_ORIGIN", settings.APPLICATION_HOST))
+ 
+            product_id = request.query_params.get("product_id")
             if product_id:
                 products = ProductMaster.objects.filter(id=product_id, is_published=True, is_active=True, is_approved=True,product_status='approved', iu_id=iu_id)
                 if not products.exists():
-                    return Response({"status": "error", "message": "Product is not published"}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({"status": "error", "message": "Product is not published"},status=status.HTTP_400_BAD_REQUEST,)
             else:
                 products = ProductMaster.objects.filter(is_published=True, is_active=True, is_approved=True, iu_id=iu_id)
-
-           
-            product_variant_data = [
-                {
-                    "product_id": product.id,
-                    "product_name": product.name,
-                    "product_description": product.description,
-                    "variants":self.fetch_variants(product.id,iu_id)
-                }
-                for product in products
-            ]
-
-            return Response({"status": "success", "message": "Data fetched successfully", "data": product_variant_data}, status=status.HTTP_200_OK)
-
+ 
+            if user_role == "consumer":
+                product_variant_data = [
+                    {
+                        "product_id": product.id,
+                        "product_name": product.name,
+                        "product_description": product.description,
+                        "variants": self.fetch_variants(product.id, iu_id),
+                    }
+                    for product in products
+                ]
+            else:
+                product_variant_data = []
+                for product in products:
+                    variants = self.fetch_variants(product.id, iu_id)
+                    selling_price = variants[0]["selling_price"] if variants else None
+                    product_variant_data.append(
+                        {
+                            "product_id": product.id,
+                            "product_name": product.name,
+                            "selling_price": selling_price,
+                        }
+                    )
+            return Response({"status": "success","message": "Data fetched successfully","data": product_variant_data,},status=status.HTTP_200_OK,)
+ 
         except Exception as e:
-            return Response({"status": "error", "message": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    
+            return Response({"status": "error","message": f"An unexpected error occurred: {str(e)}",},status=status.HTTP_500_INTERNAL_SERVER_ERROR,)
+ 
 
 class SellerOrderStatus(APIView):
     def get(self, request):
@@ -1105,6 +1121,189 @@ class BuyerOrderDetailsAPI(APIView):
         
         except Exception as e:
             return Response({"status": "error", "message": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+        
+class SellerSalesDetails(APIView):
+    def create_excel_with_pie_chart(self, most_sold_products, domain_name):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Most Sold Products"
+        domain_name = domain_name.capitalize()
+
+       
+        ws.merge_cells("A1:R2")  
+        heading_cell = ws.cell(row=1, column=1)
+        heading_cell.value = domain_name
+        heading_cell.font = Font(size=20, bold=True)
+        heading_cell.alignment = Alignment(horizontal="center", vertical="center")
+ 
+       
+        headers = [
+            "Product ID", "Product Name", "Body Content", "Description", "Total Price",
+            "Selling Price", "Stock", "Variation Details", "Sold Count"
+        ]
+        ws.append([])  
+        for col_num, header in enumerate(headers, start=1):
+            cell = ws.cell(row=4, column=col_num)
+            cell.value = header
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+ 
+        overall_total_price = sum(product["product_details"]["total_price"] for product in most_sold_products)
+        overall_selling_price = sum(product["product_details"]["selling_price"] for product in most_sold_products)
+        overall_stock = sum(product["product_details"]["stock"] for product in most_sold_products)
+ 
+ 
+        for product in most_sold_products:
+            product_details = product["product_details"]
+            variation_details = product["variation_details"]
+            variation_details_str = ""
+ 
+         
+            if isinstance(variation_details, dict):
+                variation_details_str = ", ".join([f"{key}: {value}" for key, value in variation_details.items()])
+            elif isinstance(variation_details, list):
+                variation_details_str = ", ".join(variation_details)
+ 
+         
+            body_content = product_details.get("body_content", "").strip() or ""
+            description = product_details.get("description", "").strip() or ""
+ 
+           
+            row_data = [
+                product_details["id"],  
+                product_details["name"],  
+                body_content,  
+                description,  
+                product_details["total_price"],  
+                product_details["selling_price"],  
+                product_details["stock"],  
+                variation_details_str,  
+                product["sold_count"]  
+            ]
+            ws.append(row_data)
+       
+ 
+        for _ in range(1):
+            ws.append([])
+ 
+           
+        summary_row = [  
+            "Overall Total",
+            "",
+            "",  
+            "",  
+            overall_total_price,  
+            overall_selling_price,  
+            overall_stock,
+            "",  
+            ""  
+        ]
+        ws.append(summary_row)
+        light_green_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
+        for cell in ws[ws.max_row]:
+            cell.fill = light_green_fill
+            cell.font = Font(bold=True)
+           
+        chart_sheet = wb.create_sheet(title="Product sold PieCharts")
+ 
+        chart_sheet.append(["Product Name", "Sold count"])
+       
+        for product in most_sold_products:
+            product_name = product["product_details"]["name"]
+            sold_count = product["sold_count"]
+            chart_sheet.append([product_name, sold_count])
+            for cell in chart_sheet[1]:
+                cell.font = Font(bold=True)
+ 
+   
+        pie = PieChart()
+        labels = Reference(chart_sheet, min_col=1, min_row=2, max_row=len(most_sold_products) + 1)  
+        data = Reference(chart_sheet, min_col=2, min_row=2, max_row=len(most_sold_products) + 1)
+        pie.add_data(data, titles_from_data=False)
+        pie.set_categories(labels)
+        pie.title = None  
+ 
+        chart_sheet.add_chart(pie, "E5")
+       
+        file_stream = BytesIO()
+        wb.save(file_stream)
+        file_stream.seek(0)
+ 
+        return file_stream
+ 
+ 
+    def get(self, request):
+        try:
+           
+            from_date_str = request.query_params.get('from_date')  
+            to_date_str= request.query_params.get('to_date')
+ 
+            from_date = datetime.strptime(from_date_str, '%Y-%m-%d').date()
+            to_date = datetime.strptime(to_date_str, '%Y-%m-%d').date()
+           
+           
+            role = get_user_roles(request)
+            if role not in ['manager', 'seller']:
+                return Response({"status": "error", "message": "Unauthorized user"},
+                                status=status.HTTP_401_UNAUTHORIZED)
+ 
+           
+            seller_id = request.user.id
+            iu_id = get_iuobj(request.META.get('HTTP_ORIGIN', settings.APPLICATION_HOST))
+            domain_name = iu_id.name
+ 
+            order_items = OrderItems.objects.filter(
+                seller_id=seller_id,
+                order_status='delivered',
+                created_at__date__gte=from_date,
+                created_at__date__lte=to_date,
+                iu_id=iu_id
+            )
+            if not order_items.exists():
+                return Response(
+                    {"status": "success", "message": "No order items found for the given conditions.", "data": []},
+                    status=status.HTTP_200_OK
+                )
+ 
+           
+            product_counts = order_items.values('product').annotate(sold_count=Count('product')).order_by('-sold_count')
+            product_ids = [item['product'] for item in product_counts]
+ 
+            product_variations = ProductVariation.objects.filter(
+                id__in=product_ids
+            ).select_related('product', 'variation')
+ 
+           
+            most_sold_products = [
+                {
+                    "product_details": {
+                        "id": product_data.product.id,
+                        "name": product_data.product.name,
+                        "body_content": product_data.product.body_content,
+                        "description": product_data.product.description,
+                        "total_price": product_data.total_price,
+                        "selling_price": product_data.selling_price,
+                        "stock": product_data.stock
+                    },
+                    "variation_details": ProductVariationSerializer(product_data).data["variation_details"],
+                    "sold_count": next((item["sold_count"] for item in product_counts if item["product"] == product_data.id), 0)
+                }
+                for product_data in product_variations
+            ]
+            excel_file = self.create_excel_with_pie_chart(most_sold_products,domain_name)
+            response = HttpResponse(
+                excel_file,
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            response["Content-Disposition"] = 'attachment; filename="my_sold_product.xlsx"'
+            return response
+        except ValueError as e:
+            return Response({"status": "error", "message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"status": "error", "message": f"An unexpected error occurred: {str(e)}"},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+ 
+ 
                  
 
 

@@ -15,6 +15,7 @@ urlpatterns = [
     path('buyer/',BuyerView.as_view()),
     path('orderseller/',SellerOrderStatus.as_view()),
     path('buyerorder/',BuyerOrderDetailsAPI.as_view()),
+    path('sellersales/',SellerSalesDetails.as_view()),
     path('payment-type-master/',PaymentTypeMasterView.as_view(),name='paymenttypemaster'),
     path('product/',ProductMasterView.as_view(),name='productmaster'),
     path('order_invoice/',OrderInvoiceAPI.as_view(),name='order_invoice'),
@@ -26,6 +27,4 @@ urlpatterns = [
     path('upload_image/',UploadImagesAPI.as_view(),name='upload_image'),
     path('order_type_master/',OrderTypeAPI.as_view(),name='order_type_master'),
     path('invoice_model/',InvoiceModelAPI.as_view(),name='invoice_model'),
-
-
 ]

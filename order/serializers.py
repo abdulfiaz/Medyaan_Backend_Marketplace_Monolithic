@@ -43,7 +43,7 @@ class Categoryserializer(serializers.ModelSerializer):
 class VariantMasterSerializer(serializers.ModelSerializer):
     class Meta:
         model=VariantMaster
-        fields=['id','category','name', 'description','iu_id','created_by','modified_by']
+        fields=['id','name', 'description','iu_id','created_by','modified_by']
 
     def __init__(self, *args, **kwargs):
         fields = kwargs.pop('fields', None)
@@ -67,7 +67,7 @@ class VariantMasterSerializer(serializers.ModelSerializer):
 class VariantOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model=VariantOption
-        fields=['id','variation','name', 'description','iu_id','image','created_by','modified_by']
+        fields=['id','variation','name', 'description','iu_id','created_by','modified_by']
         
     def __init__(self, *args, **kwargs):
         fields = kwargs.pop('fields', None)
